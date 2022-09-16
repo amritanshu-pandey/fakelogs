@@ -1,0 +1,15 @@
+[package]
+name = "fakelogs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.22"
+rand = "0.8.5"
+random-string = "1.0.0"
+rayon = "1.5.3"
+serde = { version = "1.0.144", features = ["derive"] }
+serde_yaml = "0.9.13"
+structopt = { version = "0.3.26", default-features = false  }

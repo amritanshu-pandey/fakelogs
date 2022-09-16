@@ -1,0 +1,8 @@
+---
+# List of patterns to generate logs for. Currently logs are generated for all specified patterns evenly.
+patterns:
+  - '{"name":"{username}", "age":"{int}", "Moto": "{sentence}", "Summary": "{paragraph}", "ip_addr": "{ipv4}", "email": "{email}", "timestamp":"{ts_rfc3389}"}'
+
+# Works for limiting the EPS to less than 2000. Cannot achieve more than ~10k eps with this setting on.
+# Set to 0 for generating uncapped EPS
+eps: 1500
