@@ -25,7 +25,7 @@ jobs:
     - name: Run help
       run: ./target/release/fakelogs --help
     - name: Run benchmark
-      run: ./target/release/fakelogs benchmark -c example/dns.yaml
+      run: ./target/release/fakelogs benchmark -c example/fakejson.yaml
     - name: Store executable as artefact
       uses: actions/upload-artifact@v2
       with:
