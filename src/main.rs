@@ -3,12 +3,17 @@ mod config;
 mod generators;
 mod log_generator;
 
+#[cfg(windows)]
+const LINE_ENDING : &'static str = "\r\n";
+#[cfg(not(windows))]
+const LINE_ENDING : &'static str = "\n";
+
 fn main() {
     let list_of_names: Vec<&str> = include_str!("./dataset/data/names_sampled.txt")
-        .split("\n")
+        .split(LINE_ENDING)
         .collect::<Vec<_>>();
     let list_of_words: Vec<&str> = include_str!("./dataset/data/words_sampled.txt")
-        .split("\n")
+        .split(LINE_ENDING)
         .collect::<Vec<_>>();
 
     let args = cli::get_cli_args();
