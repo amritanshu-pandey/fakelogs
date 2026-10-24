@@ -1,8 +1,10 @@
 # nginx error log:
 #   YYYY/MM/DD HH:MM:SS [level] pid#tid: *connection message, client: ..., server: ..., request: "...", host: "..."
 patterns:
-  - '{year}/{month}/{day} {hour}:{minute}:{second} [error] {int:1000-9999}#{int:1000-9999}: *{int:1-999999} open() "/usr/share/nginx/html/{word}.{choice:ico|png|php|txt}" failed (2: No such file or directory), client: {ipv4}, server: {domain}.{tld}, request: "GET /{word}.{choice:ico|png|php|txt} HTTP/1.1", host: "{domain}.{tld}"'
-  - '{year}/{month}/{day} {hour}:{minute}:{second} [error] {int:1000-9999}#{int:1000-9999}: *{int:1-999999} upstream timed out (110: Connection timed out) while reading response header from upstream, client: {ipv4}, server: {domain}.{tld}, request: "{choice:GET|POST} /api/{word} HTTP/1.1", upstream: "http://10.0.{int:0-255}.{int:1-254}:{choice:8080|3000|5000}/api/{word}", host: "{domain}.{tld}"'
+  - pattern: '{year}/{month}/{day} {hour}:{minute}:{second} [error] {int:1000-9999}#{int:1000-9999}: *{int:1-999999} open() "/usr/share/nginx/html/{word}.{choice:ico|png|php|txt}" failed (2: No such file or directory), client: {ipv4}, server: {domain}.{tld}, request: "GET /{word}.{choice:ico|png|php|txt} HTTP/1.1", host: "{domain}.{tld}"'
+    weight: 6
+  - pattern: '{year}/{month}/{day} {hour}:{minute}:{second} [error] {int:1000-9999}#{int:1000-9999}: *{int:1-999999} upstream timed out (110: Connection timed out) while reading response header from upstream, client: {ipv4}, server: {domain}.{tld}, request: "{choice:GET|POST} /api/{word} HTTP/1.1", upstream: "http://10.0.{int:0-255}.{int:1-254}:{choice:8080|3000|5000}/api/{word}", host: "{domain}.{tld}"'
+    weight: 2
   - '{year}/{month}/{day} {hour}:{minute}:{second} [warn] {int:1000-9999}#{int:1000-9999}: *{int:1-999999} an upstream response is buffered to a temporary file /var/cache/nginx/proxy_temp/{int:1-9}/{int:10-99}/{int:1000000000-9999999999} while reading upstream, client: {ipv4}, server: {domain}.{tld}, request: "GET /{word} HTTP/1.1"'
   - '{year}/{month}/{day} {hour}:{minute}:{second} [crit] {int:1000-9999}#{int:1000-9999}: *{int:1-999999} SSL_do_handshake() failed (SSL: error:0A00006C:SSL routines::bad key share) while SSL handshaking, client: {ipv4}, server: 0.0.0.0:443'
 

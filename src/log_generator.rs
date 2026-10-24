@@ -1,3 +1,4 @@
+use crate::config::PatternConfig;
 use crate::generators;
 use chrono::{DateTime, Utc};
 use rand::Rng;
@@ -223,6 +224,8 @@ pub struct Template {
     tokens: Vec<Token>,
     /// Problems that don't stop the pattern from working, like a likely typo.
     pub warnings: Vec<String>,
+    /// How often this pattern is used relative to the others; 0 turns it off.
+    pub weight: u32,
 }
 
 impl Template {
@@ -270,7 +273,11 @@ impl Template {
             tokens.push(Token::Literal(literal));
         }
 
-        Ok(Self { tokens, warnings })
+        Ok(Self {
+            tokens,
+            warnings,
+            weight: 1,
+        })
     }
 
     /// Appends one rendered log event (without a newline) to `out`.
@@ -296,12 +303,51 @@ impl Template {
 }
 
 /// Errors say which pattern (counting from 1) they are in.
-pub fn parse_patterns(patterns: &[String]) -> Result<Vec<Template>, String> {
+pub fn parse_patterns(patterns: &[PatternConfig]) -> Result<Vec<Template>, String> {
     patterns
         .iter()
         .enumerate()
-        .map(|(i, p)| Template::parse(p).map_err(|e| format!("pattern {}: {}", i + 1, e)))
+        .map(|(i, p)| {
+            let mut template =
+                Template::parse(&p.pattern).map_err(|e| format!("pattern {}: {}", i + 1, e))?;
+            template.weight = p.weight;
+            Ok(template)
+        })
         .collect()
+}
+
+/// Picks which template to render next, in proportion to their weights.
+///
+/// Uses smooth weighted round-robin (as in nginx's upstream balancing): every
+/// `sum of weights` picks, each template is chosen exactly `weight` times, spread
+/// out evenly. With equal weights this is plain round-robin in pattern order.
+struct Schedule {
+    weights: Vec<i64>,
+    current: Vec<i64>,
+    total: i64,
+}
+
+impl Schedule {
+    fn new(templates: &[Template]) -> Self {
+        let weights: Vec<i64> = templates.iter().map(|t| i64::from(t.weight)).collect();
+        Self {
+            current: vec![0; weights.len()],
+            total: weights.iter().sum(),
+            weights,
+        }
+    }
+
+    fn next(&mut self) -> usize {
+        let mut best = 0;
+        for i in 0..self.weights.len() {
+            self.current[i] += self.weights[i];
+            if self.current[i] > self.current[best] {
+                best = i;
+            }
+        }
+        self.current[best] -= self.total;
+        best
+    }
 }
 
 /// Paces events to a target rate by sleeping until each event's deadline,
@@ -372,24 +418,23 @@ fn generate_batches(
     list_of_words: &[&str],
 ) {
     let mut pacer = Pacer::new(eps);
+    let mut schedule = Schedule::new(templates);
     let mut batch = String::with_capacity(BATCH_SIZE);
 
     loop {
-        for template in templates {
-            template.render_into(&mut batch, list_of_names, list_of_words);
-            batch.push('\n');
-            let delay = pacer.as_mut().and_then(Pacer::delay);
-            // Send before idling so rate-limited output arrives steadily
-            // instead of in batch-sized bursts.
-            if batch.len() >= BATCH_SIZE || delay.is_some() {
-                let full = std::mem::replace(&mut batch, String::with_capacity(BATCH_SIZE));
-                if batches.send(full).is_err() {
-                    return;
-                }
+        templates[schedule.next()].render_into(&mut batch, list_of_names, list_of_words);
+        batch.push('\n');
+        let delay = pacer.as_mut().and_then(Pacer::delay);
+        // Send before idling so rate-limited output arrives steadily
+        // instead of in batch-sized bursts.
+        if batch.len() >= BATCH_SIZE || delay.is_some() {
+            let full = std::mem::replace(&mut batch, String::with_capacity(BATCH_SIZE));
+            if batches.send(full).is_err() {
+                return;
             }
-            if let Some(delay) = delay {
-                thread::sleep(delay);
-            }
+        }
+        if let Some(delay) = delay {
+            thread::sleep(delay);
         }
     }
 }
@@ -449,16 +494,15 @@ fn benchmark_thread(
 ) -> u128 {
     let mut counter: u128 = 0;
     let mut pacer = Pacer::new(eps);
+    let mut schedule = Schedule::new(templates);
     let mut line = String::new();
     while counter < count {
-        for template in templates {
-            line.clear();
-            template.render_into(&mut line, list_of_names, list_of_words);
-            black_box(&line);
-            counter += 1;
-            if let Some(delay) = pacer.as_mut().and_then(Pacer::delay) {
-                thread::sleep(delay);
-            }
+        line.clear();
+        templates[schedule.next()].render_into(&mut line, list_of_names, list_of_words);
+        black_box(&line);
+        counter += 1;
+        if let Some(delay) = pacer.as_mut().and_then(Pacer::delay) {
+            thread::sleep(delay);
         }
     }
     counter
@@ -606,7 +650,13 @@ mod tests {
 
     #[test]
     fn test_errors_name_the_pattern() {
-        let patterns = vec!["{ipv4}".to_string(), "{int:9-1}".to_string()];
+        let patterns: Vec<PatternConfig> = ["{ipv4}", "{int:9-1}"]
+            .iter()
+            .map(|p| PatternConfig {
+                pattern: p.to_string(),
+                weight: 1,
+            })
+            .collect();
         let err = parse_patterns(&patterns).unwrap_err();
         assert!(err.starts_with("pattern 2: "), "{}", err);
     }
@@ -616,6 +666,42 @@ mod tests {
         assert_eq!(edit_distance("usrname", "username"), 1);
         assert_eq!(edit_distance("ipv4", "ipv4"), 0);
         assert_eq!(edit_distance("", "abc"), 3);
+    }
+
+    fn templates_with_weights(weights: &[u32]) -> Vec<Template> {
+        weights
+            .iter()
+            .map(|&weight| {
+                let mut template = Template::parse("x").unwrap();
+                template.weight = weight;
+                template
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_schedule_equal_weights_is_round_robin() {
+        let mut schedule = Schedule::new(&templates_with_weights(&[1, 1, 1]));
+        let picks: Vec<usize> = (0..7).map(|_| schedule.next()).collect();
+        assert_eq!(picks, vec![0, 1, 2, 0, 1, 2, 0]);
+    }
+
+    #[test]
+    fn test_schedule_matches_weights_exactly() {
+        let mut schedule = Schedule::new(&templates_with_weights(&[5, 0, 2, 1]));
+        let mut counts = [0; 4];
+        for _ in 0..8 * 100 {
+            counts[schedule.next()] += 1;
+        }
+        assert_eq!(counts, [500, 0, 200, 100]);
+    }
+
+    #[test]
+    fn test_schedule_spreads_picks_out() {
+        // A heavy pattern shouldn't run in one long streak.
+        let mut schedule = Schedule::new(&templates_with_weights(&[3, 1]));
+        let picks: Vec<usize> = (0..8).map(|_| schedule.next()).collect();
+        assert_eq!(picks, vec![0, 0, 1, 0, 0, 0, 1, 0]);
     }
 
     #[test]

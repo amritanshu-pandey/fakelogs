@@ -1,10 +1,13 @@
 # PostgreSQL server log, default log_line_prefix ('%m [%p] ') plus user@database:
 #   YYYY-MM-DD HH:MM:SS.mmm UTC [pid] user@db LEVEL:  message
 patterns:
-  - '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] {choice:app|readonly|postgres}@{choice:shop|analytics|auth} LOG:  duration: {int:1-9000}.{int:100-999} ms  statement: SELECT * FROM {word} WHERE id = {int:1-999999}'
-  - '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] {choice:app|postgres}@{choice:shop|analytics|auth} ERROR:  duplicate key value violates unique constraint "{word}_pkey"'
+  - pattern: '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] {choice:app|readonly|postgres}@{choice:shop|analytics|auth} LOG:  duration: {int:1-9000}.{int:100-999} ms  statement: SELECT * FROM {word} WHERE id = {int:1-999999}'
+    weight: 20
+  - pattern: '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] {choice:app|postgres}@{choice:shop|analytics|auth} ERROR:  duplicate key value violates unique constraint "{word}_pkey"'
+    weight: 2
   - '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] {choice:app|postgres}@{choice:shop|analytics|auth} ERROR:  relation "{word}" does not exist at character {int:15-80}'
-  - '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] LOG:  checkpoint complete: wrote {int:10-9000} buffers ({int:0-9}.{int:0-9}%); 0 WAL file(s) added, 0 removed, {int:0-5} recycled'
+  - pattern: '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] LOG:  checkpoint complete: wrote {int:10-9000} buffers ({int:0-9}.{int:0-9}%); 0 WAL file(s) added, 0 removed, {int:0-5} recycled'
+    weight: 3
   - '{year}-{month}-{day} {hour}:{minute}:{second}.{int:100-999} UTC [{int:1000-65000}] FATAL:  password authentication failed for user "{choice:admin|root|postgres|app}"'
 
 eps: 10

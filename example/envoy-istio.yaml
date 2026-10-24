@@ -4,10 +4,12 @@
 # UF (upstream connection failure) and URX (retry limit exceeded) for 503s.
 patterns:
   # Envoy default
-  - '[{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100-999}Z] "{choice:GET|GET|GET|POST|PUT|DELETE} /api/{word}/{int:1-99999} HTTP/{choice:1.1|2}" {choice:200|200|200|201|204|404} - {int:0-5000} {int:0-90000} {int:1-900} {int:1-850} "{ipv4}" "{choice:curl/8.10.1|okhttp/4.12.0|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36}" "{uuid}" "{choice:api|shop|auth}.example.com" "10.0.{int:0-255}.{int:1-254}:{choice:8080|3000|9000}"'
+  - pattern: '[{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100-999}Z] "{choice:GET|GET|GET|POST|PUT|DELETE} /api/{word}/{int:1-99999} HTTP/{choice:1.1|2}" {choice:200|200|200|201|204|404} - {int:0-5000} {int:0-90000} {int:1-900} {int:1-850} "{ipv4}" "{choice:curl/8.10.1|okhttp/4.12.0|Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36}" "{uuid}" "{choice:api|shop|auth}.example.com" "10.0.{int:0-255}.{int:1-254}:{choice:8080|3000|9000}"'
+    weight: 10
   - '[{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100-999}Z] "GET /api/{word} HTTP/1.1" 503 {choice:UH|UF|URX} 0 {choice:19|91} {int:0-5000} - "{ipv4}" "curl/8.10.1" "{uuid}" "{choice:api|shop|auth}.example.com" "-"'
   # Istio sidecar default
-  - '[{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100-999}Z] "{choice:GET|GET|POST} /{word} HTTP/1.1" {choice:200|200|200|404} - via_upstream - "-" {int:0-5000} {int:0-90000} {int:1-900} {int:1-850} "-" "{choice:Go-http-client/1.1|python-requests/2.32.3}" "{uuid}" "{choice:reviews|ratings|details}:9080" "10.0.{int:0-255}.{int:1-254}:9080" outbound|9080||{choice:reviews|ratings|details}.default.svc.cluster.local 10.0.{int:0-255}.{int:1-254}:{int:30000-60000} 10.96.{int:0-255}.{int:1-254}:9080 10.0.{int:0-255}.{int:1-254}:{int:30000-60000} - default'
+  - pattern: '[{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100-999}Z] "{choice:GET|GET|POST} /{word} HTTP/1.1" {choice:200|200|200|404} - via_upstream - "-" {int:0-5000} {int:0-90000} {int:1-900} {int:1-850} "-" "{choice:Go-http-client/1.1|python-requests/2.32.3}" "{uuid}" "{choice:reviews|ratings|details}:9080" "10.0.{int:0-255}.{int:1-254}:9080" outbound|9080||{choice:reviews|ratings|details}.default.svc.cluster.local 10.0.{int:0-255}.{int:1-254}:{int:30000-60000} 10.96.{int:0-255}.{int:1-254}:9080 10.0.{int:0-255}.{int:1-254}:{int:30000-60000} - default'
+    weight: 10
   - '[{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100-999}Z] "GET /{word} HTTP/1.1" 503 UH no_healthy_upstream - "-" 0 19 {int:0-30} - "-" "Go-http-client/1.1" "{uuid}" "{choice:reviews|ratings|details}:9080" "10.0.{int:0-255}.{int:1-254}:9080" outbound|9080||{choice:reviews|ratings|details}.default.svc.cluster.local - 10.96.{int:0-255}.{int:1-254}:9080 10.0.{int:0-255}.{int:1-254}:{int:30000-60000} - default'
 
 eps: 10

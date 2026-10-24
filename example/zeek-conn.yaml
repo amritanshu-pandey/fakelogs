@@ -3,9 +3,13 @@
 #   conn_state local_orig local_resp missed_bytes history orig_pkts orig_ip_bytes resp_pkts resp_ip_bytes tunnel_parents
 # Double-quoted YAML strings turn \t into a real tab.
 patterns:
-  - "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t{ipv4}\t{choice:443|443|443|80}\ttcp\t{choice:ssl|ssl|http}\t{int:0-120}.{int:100000-999999}\t{int:300-90000}\t{int:500-9000000}\tSF\tT\tF\t0\tShADadFf\t{int:5-900}\t{int:500-900000}\t{int:5-9000}\t{int:500-9000000}\t-"
-  - "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t10.0.0.2\t53\tudp\tdns\t0.00{int:1000-9999}\t{int:30-80}\t{int:50-500}\tSF\tT\tT\t0\tDd\t1\t{int:58-108}\t1\t{int:78-528}\t-"
-  - "{unix}.{int:100000-999999}\tC{hex:17}\t{ipv4}\t{int:1024-65535}\t10.0.{int:0-255}.{int:1-254}\t{choice:22|23|445|3389|5900}\ttcp\t-\t-\t-\t-\t{choice:S0|REJ|S0}\tF\tT\t0\tS\t{int:1-3}\t{int:40-180}\t0\t0\t-"
-  - "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t{ipv4}\t{choice:123|443}\tudp\t{choice:ntp|quic}\t{int:0-30}.{int:100000-999999}\t{int:48-90000}\t{int:48-900000}\tSF\tT\tF\t0\tDd\t{int:1-200}\t{int:76-90000}\t{int:1-200}\t{int:76-900000}\t-"
+  - pattern: "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t{ipv4}\t{choice:443|443|443|80}\ttcp\t{choice:ssl|ssl|http}\t{int:0-120}.{int:100000-999999}\t{int:300-90000}\t{int:500-9000000}\tSF\tT\tF\t0\tShADadFf\t{int:5-900}\t{int:500-900000}\t{int:5-9000}\t{int:500-9000000}\t-"
+    weight: 20
+  - pattern: "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t10.0.0.2\t53\tudp\tdns\t0.00{int:1000-9999}\t{int:30-80}\t{int:50-500}\tSF\tT\tT\t0\tDd\t1\t{int:58-108}\t1\t{int:78-528}\t-"
+    weight: 20
+  - pattern: "{unix}.{int:100000-999999}\tC{hex:17}\t{ipv4}\t{int:1024-65535}\t10.0.{int:0-255}.{int:1-254}\t{choice:22|23|445|3389|5900}\ttcp\t-\t-\t-\t-\t{choice:S0|REJ|S0}\tF\tT\t0\tS\t{int:1-3}\t{int:40-180}\t0\t0\t-"
+    weight: 3
+  - pattern: "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t{ipv4}\t{choice:123|443}\tudp\t{choice:ntp|quic}\t{int:0-30}.{int:100000-999999}\t{int:48-90000}\t{int:48-900000}\tSF\tT\tF\t0\tDd\t{int:1-200}\t{int:76-90000}\t{int:1-200}\t{int:76-900000}\t-"
+    weight: 5
 
 eps: 10

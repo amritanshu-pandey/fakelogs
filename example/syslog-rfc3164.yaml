@@ -2,11 +2,16 @@
 #   <PRI>Mmm dd hh:mm:ss hostname program[pid]: message
 # Note: real RFC 3164 pads single-digit days with a space ("Oct  4"); this uses a zero ("Oct 04").
 patterns:
-  - '<{choice:38|86}>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} sshd[{int:1000-65000}]: {choice:Accepted publickey|Accepted password|Failed password} for {choice:root|ubuntu|ec2-user|deploy|admin} from {ipv4} port {int:1024-65535} ssh2'
-  - '<{choice:38|86}>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} sshd[{int:1000-65000}]: Invalid user {word} from {ipv4} port {int:1024-65535}'
-  - '<85>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} sudo[{int:1000-65000}]: {choice:ubuntu|deploy|admin} : TTY=pts/{int:0-5} ; PWD=/home/{choice:ubuntu|deploy|admin} ; USER=root ; COMMAND=/usr/bin/{choice:systemctl restart nginx|apt-get update|journalctl -xe|cat /etc/shadow}'
-  - '<78>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} CRON[{int:1000-65000}]: ({choice:root|www-data}) CMD ({choice:/usr/local/bin/backup.sh|run-parts /etc/cron.hourly|/usr/bin/certbot renew -q})'
-  - '<30>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} systemd[1]: {choice:Started|Stopped|Reloading} {choice:nginx.service - A high performance web server|postgresql.service - PostgreSQL RDBMS|cron.service - Regular background program processing daemon}.'
+  - pattern: '<{choice:38|86}>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} sshd[{int:1000-65000}]: {choice:Accepted publickey|Accepted password|Failed password} for {choice:root|ubuntu|ec2-user|deploy|admin} from {ipv4} port {int:1024-65535} ssh2'
+    weight: 10
+  - pattern: '<{choice:38|86}>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} sshd[{int:1000-65000}]: Invalid user {word} from {ipv4} port {int:1024-65535}'
+    weight: 4
+  - pattern: '<85>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} sudo[{int:1000-65000}]: {choice:ubuntu|deploy|admin} : TTY=pts/{int:0-5} ; PWD=/home/{choice:ubuntu|deploy|admin} ; USER=root ; COMMAND=/usr/bin/{choice:systemctl restart nginx|apt-get update|journalctl -xe|cat /etc/shadow}'
+    weight: 3
+  - pattern: '<78>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} CRON[{int:1000-65000}]: ({choice:root|www-data}) CMD ({choice:/usr/local/bin/backup.sh|run-parts /etc/cron.hourly|/usr/bin/certbot renew -q})'
+    weight: 10
+  - pattern: '<30>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} systemd[1]: {choice:Started|Stopped|Reloading} {choice:nginx.service - A high performance web server|postgresql.service - PostgreSQL RDBMS|cron.service - Regular background program processing daemon}.'
+    weight: 3
   - '<4>{month_name} {day} {hour}:{minute}:{second} {choice:web|db|app}{int:1-9} kernel: [{int:1000-999999}.{int:100000-999999}] {choice:Out of memory: Killed process|TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.|EXT4-fs (nvme0n1p1): re-mounted. Opts: (null)}'
 
 eps: 10

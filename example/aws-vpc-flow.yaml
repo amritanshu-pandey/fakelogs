@@ -2,8 +2,10 @@
 #   version account-id interface-id srcaddr dstaddr srcport dstport protocol packets bytes start end action log-status
 # start and end are both the current time.
 patterns:
-  - '2 123456789012 eni-{hex:17} 10.0.{int:0-255}.{int:1-254} {ipv4} {int:1024-65535} {choice:443|443|80|53|22|3306|5432} {choice:6|6|6|17} {int:1-5000} {int:40-9000000} {unix} {unix} {choice:ACCEPT|ACCEPT|ACCEPT|REJECT} OK'
-  - '2 123456789012 eni-{hex:17} {ipv4} 10.0.{int:0-255}.{int:1-254} {int:1024-65535} {choice:22|3389|23|445|8080} 6 {int:1-20} {int:40-2000} {unix} {unix} REJECT OK'
+  - pattern: '2 123456789012 eni-{hex:17} 10.0.{int:0-255}.{int:1-254} {ipv4} {int:1024-65535} {choice:443|443|80|53|22|3306|5432} {choice:6|6|6|17} {int:1-5000} {int:40-9000000} {unix} {unix} {choice:ACCEPT|ACCEPT|ACCEPT|REJECT} OK'
+    weight: 20
+  - pattern: '2 123456789012 eni-{hex:17} {ipv4} 10.0.{int:0-255}.{int:1-254} {int:1024-65535} {choice:22|3389|23|445|8080} 6 {int:1-20} {int:40-2000} {unix} {unix} REJECT OK'
+    weight: 3
   - '2 123456789012 eni-{hex:17} - - - - - - - {unix} {unix} - NODATA'
 
 eps: 10

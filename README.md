@@ -7,14 +7,22 @@ A crazy fast fake log data generator
 
 ```yaml
 ---
-# List of patterns to generate logs for. Currently logs are generated for all specified patterns evenly.
+# Patterns to generate logs from.
 patterns:
   - '{"name":"{username}", "age":"{int}", "Moto": "{sentence}", "Summary": "{paragraph}", "ip_addr": "{ipv4}", "email": "{email}", "timestamp":"{ts_rfc3339}"}'
+
+  # Optional: a weight sets how often a pattern is used relative to the others (default 1).
+  # Here the access line is 19 times as common as the error line. A weight of 0 turns a pattern off.
+  - pattern: '{ipv4} - - "GET /{word} HTTP/1.1" 200'
+    weight: 19
+  - pattern: '{ipv4} - - "GET /{word} HTTP/1.1" 500'
 
 # Maximum number of log events per second.
 # Set to 0 for uncapped EPS. Defaults to 10 if left out.
 eps: 10
 ```
+
+Weights are exact, not random: with weights 19 and 1, every 20 events contain exactly 19 of the first pattern and 1 of the second, spread out evenly. Patterns with equal weights are used in turn, in the order they are listed.
 
 ## Placeholders
 
