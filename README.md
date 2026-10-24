@@ -12,7 +12,7 @@ patterns:
   - '{"name":"{username}", "age":"{int}", "Moto": "{sentence}", "Summary": "{paragraph}", "ip_addr": "{ipv4}", "email": "{email}", "timestamp":"{ts_rfc3339}"}'
 
 # Maximum number of log events per second.
-# Set to 0 for generating uncapped EPS
+# Set to 0 for uncapped EPS. Defaults to 10 if left out.
 eps: 10
 ```
 

@@ -3,6 +3,8 @@ mod config;
 mod generators;
 mod log_generator;
 
+use std::path::Path;
+
 fn main() {
     let list_of_names: Vec<&str> = include_str!("./dataset/data/names_sampled.txt")
         .lines()
@@ -19,8 +21,7 @@ fn main() {
             eps,
             threads,
         } => {
-            let cfg = config::get_config_yaml(configfile);
-            let templates = parse_patterns_or_exit(&cfg.patterns);
+            let (cfg, templates) = load_config_or_exit(&configfile);
             let threads = resolve_threads(threads);
             if eps && cfg.eps > 0 {
                 // Generate one second's worth of events at the configured rate.
@@ -47,8 +48,7 @@ fn main() {
             configfile,
             threads,
         } => {
-            let cfg = config::get_config_yaml(configfile);
-            let templates = parse_patterns_or_exit(&cfg.patterns);
+            let (cfg, templates) = load_config_or_exit(&configfile);
             if let Err(e) = log_generator::generate_logs(
                 cfg.eps,
                 resolve_threads(threads),
@@ -66,11 +66,28 @@ fn main() {
     }
 }
 
-fn parse_patterns_or_exit(patterns: &[String]) -> Vec<log_generator::Template> {
-    log_generator::parse_patterns(patterns).unwrap_or_else(|e| {
-        eprintln!("Invalid pattern in config file: {}", e);
-        std::process::exit(2);
-    })
+/// Loads the config and parses its patterns, printing any warnings.
+/// Exits with status 2 if either is invalid.
+fn load_config_or_exit(path: &Path) -> (config::Config, Vec<log_generator::Template>) {
+    let loaded = config::load(path).and_then(|cfg| {
+        let templates = log_generator::parse_patterns(&cfg.patterns)
+            .map_err(|e| format!("Invalid config file {}: {}", path.display(), e))?;
+        Ok((cfg, templates))
+    });
+    match loaded {
+        Ok((cfg, templates)) => {
+            for (i, template) in templates.iter().enumerate() {
+                for warning in &template.warnings {
+                    eprintln!("warning: {} pattern {}: {}", path.display(), i + 1, warning);
+                }
+            }
+            (cfg, templates)
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(2);
+        }
+    }
 }
 
 /// `--threads 0` means one thread per CPU.

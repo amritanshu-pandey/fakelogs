@@ -34,6 +34,34 @@ enum Placeholder {
     Paragraph,
 }
 
+/// Every placeholder name, for suggesting a fix when a pattern has a typo.
+const PLACEHOLDER_NAMES: &[&str] = &[
+    "str",
+    "ipv4",
+    "ipv6",
+    "uuid",
+    "hex",
+    "unix",
+    "email",
+    "username",
+    "day",
+    "month",
+    "month_name",
+    "year",
+    "hour12",
+    "hour",
+    "minute",
+    "second",
+    "int",
+    "choice",
+    "ts_rfc3339",
+    "domain",
+    "tld",
+    "word",
+    "sentence",
+    "paragraph",
+];
+
 impl Placeholder {
     /// Parses the text between the braces, e.g. `ipv4` or `int:1-500`.
     /// Returns Ok(None) if it isn't a placeholder name, so it can be kept as literal text.
@@ -126,6 +154,50 @@ impl Placeholder {
     }
 }
 
+/// A warning for `{text}` if it looks like a mistyped placeholder (e.g. `{usrname}`)
+/// rather than other text in braces, like a JSON object.
+fn unknown_placeholder_warning(text: &str) -> Option<String> {
+    let name = text.split(':').next().unwrap_or_default();
+    let looks_like_name = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !looks_like_name {
+        return None;
+    }
+
+    let lowercase = name.to_ascii_lowercase();
+    let max_distance = if name.len() >= 4 { 2 } else { 1 };
+    let suggestion = PLACEHOLDER_NAMES
+        .iter()
+        .map(|known| (edit_distance(&lowercase, known), known))
+        .filter(|(distance, _)| *distance <= max_distance)
+        .min();
+    Some(match suggestion {
+        Some((_, known)) => format!(
+            "{{{}}} isn't a placeholder, so it's copied as-is. Did you mean {{{}}}?",
+            text, known
+        ),
+        None => format!(
+            "{{{}}} isn't a placeholder, so it's copied as-is. See the README for the list of placeholders.",
+            text
+        ),
+    })
+}
+
+/// Levenshtein distance: the number of single-character edits between `a` and `b`.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut previous: Vec<usize> = (0..=b.len()).collect();
+    for (i, a_char) in a.chars().enumerate() {
+        let mut current = vec![i + 1];
+        for (j, b_char) in b.iter().enumerate() {
+            let substitution = previous[j] + usize::from(a_char != *b_char);
+            current.push(substitution.min(previous[j + 1] + 1).min(current[j] + 1));
+        }
+        previous = current;
+    }
+    previous[b.len()]
+}
+
 /// Parses the `MIN-MAX` in `{int:MIN-MAX}`; both ends are included.
 fn parse_int_range(args: &str) -> Result<Placeholder, String> {
     let invalid = || format!("{{int:{}}}: expected a range like {{int:1-500}}", args);
@@ -149,6 +221,8 @@ enum Token {
 #[derive(Debug)]
 pub struct Template {
     tokens: Vec<Token>,
+    /// Problems that don't stop the pattern from working, like a likely typo.
+    pub warnings: Vec<String>,
 }
 
 impl Template {
@@ -156,16 +230,27 @@ impl Template {
     /// Known placeholders with bad arguments, like `{int:9-1}`, are an error.
     pub fn parse(pattern: &str) -> Result<Self, String> {
         let mut tokens = vec![];
+        let mut warnings = vec![];
         let mut literal = String::new();
         let mut rest = pattern;
 
         while let Some(open) = rest.find('{') {
             literal.push_str(&rest[..open]);
             let after_open = &rest[open + 1..];
-            let placeholder = match after_open.find('}') {
-                Some(close) => Placeholder::parse(&after_open[..close])?.map(|p| (p, close)),
+            let candidate = after_open
+                .find('}')
+                .map(|close| (&after_open[..close], close));
+            let placeholder = match candidate {
+                Some((text, close)) => Placeholder::parse(text)?.map(|p| (p, close)),
                 None => None,
             };
+            if let (None, Some((text, _))) = (&placeholder, candidate) {
+                if let Some(warning) = unknown_placeholder_warning(text) {
+                    if !warnings.contains(&warning) {
+                        warnings.push(warning);
+                    }
+                }
+            }
             match placeholder {
                 Some((placeholder, close)) => {
                     if !literal.is_empty() {
@@ -185,7 +270,7 @@ impl Template {
             tokens.push(Token::Literal(literal));
         }
 
-        Ok(Self { tokens })
+        Ok(Self { tokens, warnings })
     }
 
     /// Appends one rendered log event (without a newline) to `out`.
@@ -210,8 +295,13 @@ impl Template {
     }
 }
 
+/// Errors say which pattern (counting from 1) they are in.
 pub fn parse_patterns(patterns: &[String]) -> Result<Vec<Template>, String> {
-    patterns.iter().map(|p| Template::parse(p)).collect()
+    patterns
+        .iter()
+        .enumerate()
+        .map(|(i, p)| Template::parse(p).map_err(|e| format!("pattern {}: {}", i + 1, e)))
+        .collect()
 }
 
 /// Paces events to a target rate by sleeping until each event's deadline,
@@ -490,6 +580,45 @@ mod tests {
     }
 
     #[test]
+    fn test_every_placeholder_name_parses() {
+        for name in PLACEHOLDER_NAMES {
+            let text = match *name {
+                "hex" => "hex:4".to_string(),
+                "choice" => "choice:a|b".to_string(),
+                _ => name.to_string(),
+            };
+            assert!(matches!(Placeholder::parse(&text), Ok(Some(_))), "{}", name);
+        }
+    }
+
+    #[test]
+    fn test_warns_about_likely_typos() {
+        let template = Template::parse("{usrname} {IPV4} {usrname} {timestamp}").unwrap();
+        assert_eq!(template.warnings.len(), 3, "{:?}", template.warnings);
+        assert!(template.warnings[0].ends_with("Did you mean {username}?"));
+        assert!(template.warnings[1].ends_with("Did you mean {ipv4}?"));
+        assert!(template.warnings[2].contains("See the README"));
+
+        // Braces that aren't placeholder-like don't warn.
+        let template = Template::parse(r#"{"user":"{username}"} {} { spaced } {1}"#).unwrap();
+        assert_eq!(template.warnings, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_errors_name_the_pattern() {
+        let patterns = vec!["{ipv4}".to_string(), "{int:9-1}".to_string()];
+        let err = parse_patterns(&patterns).unwrap_err();
+        assert!(err.starts_with("pattern 2: "), "{}", err);
+    }
+
+    #[test]
+    fn test_edit_distance() {
+        assert_eq!(edit_distance("usrname", "username"), 1);
+        assert_eq!(edit_distance("ipv4", "ipv4"), 0);
+        assert_eq!(edit_distance("", "abc"), 3);
+    }
+
+    #[test]
     fn test_split_evenly() {
         assert_eq!(split_evenly(10, 3), vec![4, 3, 3]);
         assert_eq!(split_evenly(0, 2), vec![0, 0]);
@@ -515,10 +644,16 @@ mod tests {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|ext| ext == "yaml") {
-                let cfg = crate::config::get_config_yaml(path.clone());
+                let cfg = crate::config::load(&path).unwrap();
                 let templates = parse_patterns(&cfg.patterns)
                     .unwrap_or_else(|e| panic!("{}: {}", path.display(), e));
                 for template in &templates {
+                    assert_eq!(
+                        template.warnings,
+                        Vec::<String>::new(),
+                        "{}",
+                        path.display()
+                    );
                     let out = template.render(NAMES, WORDS);
                     assert!(!out.is_empty(), "{}", path.display());
                 }
