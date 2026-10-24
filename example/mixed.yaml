@@ -1,0 +1,39 @@
+# Example config with a mix of common log formats, using every placeholder.
+#
+# Available placeholders:
+#   {ts_rfc3339}  timestamp, e.g. 2026-10-24T01:53:53.024855810+00:00
+#   {year} {month} {day} {hour} {hour12} {minute} {second}
+#                 parts of the current UTC time (not zero padded)
+#   {ipv4}        random IPv4 address
+#   {username}    random first name
+#   {email}       name@RANDOMDOMAIN.tld
+#   {domain}      5-10 random uppercase letters
+#   {tld}         one of com, it, guru, in, com.au, co.in, co.uk
+#   {str}         10-11 random uppercase letters
+#   {int}         random number from 1 to 99
+#   {word}        random word
+#   {sentence}    5-14 random words ending with a full stop
+#   {paragraph}   5-14 random sentences
+#
+# Anything else in braces (like JSON objects) is copied through as-is.
+# Placeholders in the same event share one timestamp.
+
+# Logs are generated for each pattern in turn, so each one gets an equal share.
+patterns:
+  # syslog-style sshd login
+  - '{ts_rfc3339} web-{int} sshd[{int}{int}]: Accepted password for {username} from {ipv4} port {int}{int} ssh2'
+
+  # Apache/nginx combined access log
+  - '{ipv4} - {username} [{day}/{month}/{year}:{hour}:{minute}:{second} +0000] "GET /{word}/{word}?id={int} HTTP/1.1" 200 {int}{int} "https://{domain}.{tld}/" "curl/8.{int}"'
+
+  # logfmt application log
+  - 'ts={ts_rfc3339} level=info service={word} user={username} email={email} msg="{sentence}"'
+
+  # JSON audit event
+  - '{"ts":"{ts_rfc3339}","event":"login","user":"{username}","src_ip":"{ipv4}","session":"{str}","host":"{domain}.{tld}"}'
+
+  # 12-hour clock with a free-text body
+  - '[{hour12}:{minute}:{second}] {username} posted on {domain}.{tld}: {paragraph}'
+
+# Maximum number of log events per second. Set to 0 for uncapped.
+eps: 10
