@@ -1,0 +1,8 @@
+# Structured JSON application logs, one object per line, like most logging
+# libraries (zap, logrus, pino, structlog) produce.
+patterns:
+  - '{"time":"{ts_rfc3339}","level":"{choice:debug|info|info|info|warn|error}","service":"{choice:api|checkout|auth|search}","trace_id":"{hex:32}","span_id":"{hex:16}","msg":"{sentence}","user_id":{int:1-500000},"duration_ms":{int:1-3000}}'
+  - '{"time":"{ts_rfc3339}","level":"info","service":"api","msg":"request completed","http":{"method":"{choice:GET|GET|POST|PUT|DELETE}","path":"/v1/{word}/{int:1-99999}","status":{choice:200|200|200|201|204|400|404|500},"remote_ip":"{ipv4}","user_agent":"{choice:curl/8.10.1|okhttp/4.12.0|Go-http-client/2.0}"},"request_id":"{uuid}","duration_ms":{int:1-3000}}'
+  - '{"time":"{ts_rfc3339}","level":"error","service":"{choice:api|checkout|auth|search}","msg":"{choice:database connection failed|upstream timeout|payment declined|cache miss storm}","error":"{sentence}","attempt":{int:1-5},"trace_id":"{hex:32}"}'
+
+eps: 10

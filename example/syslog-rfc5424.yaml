@@ -1,0 +1,7 @@
+# IETF syslog (RFC 5424) lines:
+#   <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID [STRUCTURED-DATA] MSG
+patterns:
+  - '<{choice:134|134|131|132}>1 {ts_rfc3339} {choice:web|api|worker}-{int:1-20}.{domain}.{tld} {choice:payments|checkout|inventory|auth} {int:100-65000} {choice:REQ|AUDIT|-} [meta@32473 requestId="{uuid}" user="{username}" srcIp="{ipv4}"] {sentence}'
+  - '<{choice:134|131}>1 {ts_rfc3339} {choice:web|api|worker}-{int:1-20}.{domain}.{tld} {choice:payments|checkout|inventory|auth} {int:100-65000} - - {sentence}'
+
+eps: 10

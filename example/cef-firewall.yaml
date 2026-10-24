@@ -1,0 +1,6 @@
+# Firewall events in ArcSight Common Event Format (CEF), behind a syslog header, as SIEMs ingest them:
+#   CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|Extension
+patterns:
+  - '{month_name} {day} {hour}:{minute}:{second} fw{int:1-2} CEF:0|Example|Firewall|10.2|{choice:traffic|traffic|traffic|threat}|{choice:allow|allow|deny|drop}|{int:1-10}|rt={unix}000 src=10.0.{int:0-255}.{int:1-254} spt={int:1024-65535} dst={ipv4} dpt={choice:443|443|80|53|22|3389} proto={choice:TCP|TCP|UDP} act={choice:allow|allow|deny|drop} suser={username} cs1Label=rule cs1={choice:allow-web|block-rdp|default-deny|allow-dns} in={int:40-900000} out={int:40-900000}'
+
+eps: 10

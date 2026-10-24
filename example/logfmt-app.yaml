@@ -1,0 +1,7 @@
+# logfmt (key=value) application logs, as written by Heroku, Grafana Loki,
+# Go's log/slog text handler and many others.
+patterns:
+  - 'time={ts_rfc3339} level={choice:DEBUG|INFO|INFO|INFO|WARN|ERROR} msg="{sentence}" service={choice:api|worker|scheduler} request_id={uuid} user={username} duration={int:1-3000}ms'
+  - 'time={ts_rfc3339} level=INFO msg="http request" method={choice:GET|POST|PUT|DELETE} path=/{word}/{int:1-9999} status={choice:200|200|200|201|404|500} remote={ipv4}:{int:1024-65535} bytes={int:0-90000}'
+
+eps: 10

@@ -1,0 +1,12 @@
+# AWS Application Load Balancer access log entries. Field order follows
+# https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html
+#   type time elb client:port target:port request_processing_time target_processing_time response_processing_time
+#   elb_status_code target_status_code received_bytes sent_bytes "request" "user_agent" ssl_cipher ssl_protocol
+#   target_group_arn "trace_id" "domain_name" "chosen_cert_arn" matched_rule_priority request_creation_time
+#   "actions_executed" "redirect_url" "error_reason" "target:port_list" "target_status_code_list"
+#   "classification" "classification_reason" conn_trace_id
+patterns:
+  - 'https {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z app/my-alb/{hex:16} {ipv4}:{int:1024-65535} 10.0.{int:0-255}.{int:1-254}:{choice:80|8080} 0.00{int:0-9} 0.{int:0-9}{int:10-99} 0.000 {choice:200|200|200|200|201|301|302|400|403|404|500|502|503|504} {choice:200|200|200|200|201|301|302|400|403|404|500|502|503|504} {int:100-5000} {int:200-90000} "{choice:GET|GET|POST|PUT|DELETE} https://{domain}.{tld}:443/{word}/{word} HTTP/{choice:1.1|2.0}" "{choice:curl/8.10.1|Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36|okhttp/4.12.0}" ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/my-targets/{hex:16} "Root=1-{hex:8}-{hex:24}" "{domain}.{tld}" "arn:aws:acm:us-east-1:123456789012:certificate/{uuid}" {int:0-10} {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z "forward" "-" "-" "10.0.{int:0-255}.{int:1-254}:80" "200" "-" "-" TID_{hex:32}'
+  - 'http {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z app/my-alb/{hex:16} {ipv4}:{int:1024-65535} - -1 -1 -1 301 - {int:50-500} {int:200-400} "GET http://{domain}.{tld}:80/{word} HTTP/1.1" "curl/8.10.1" - - - "Root=1-{hex:8}-{hex:24}" "-" "-" 0 {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z "redirect" "https://{domain}.{tld}:443/{word}" "-" "-" "-" "-" "-" TID_{hex:32}'
+
+eps: 10
