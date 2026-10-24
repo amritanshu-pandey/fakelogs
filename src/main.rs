@@ -16,21 +16,25 @@ fn main() {
     match args.commands {
         cli::Subcommands::Benchmark { configfile, eps } => {
             let cfg = config::get_config_yaml(configfile);
-            if eps {
-                log_generator::benchmark_with_eps(
-                    &cfg.patterns,
+            let templates = log_generator::parse_patterns(&cfg.patterns);
+            if eps && cfg.eps > 0 {
+                // Generate one second's worth of events at the configured rate.
+                log_generator::benchmark(
+                    &templates,
+                    cfg.eps,
                     cfg.eps,
                     &list_of_names,
                     &list_of_words,
                 );
             } else {
-                log_generator::benchmark(&cfg.patterns, 100000, &list_of_names, &list_of_words);
+                log_generator::benchmark(&templates, 100000, 0, &list_of_names, &list_of_words);
             }
         }
         cli::Subcommands::Generate { configfile } => {
             let cfg = config::get_config_yaml(configfile);
+            let templates = log_generator::parse_patterns(&cfg.patterns);
             if let Err(e) =
-                log_generator::generate_logs(cfg.eps, &cfg.patterns, &list_of_names, &list_of_words)
+                log_generator::generate_logs(cfg.eps, &templates, &list_of_names, &list_of_words)
             {
                 // A closed pipe (e.g. `fakelogs generate ... | head`) is a normal way to stop.
                 if e.kind() != std::io::ErrorKind::BrokenPipe {

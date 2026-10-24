@@ -26,6 +26,5 @@ pub enum Subcommands {
 }
 
 pub fn get_cli_args() -> Cli {
-    let cli_args = Cli::from_args();
-    cli_args
+    Cli::from_args()
 }

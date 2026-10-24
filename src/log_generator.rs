@@ -1,10 +1,153 @@
 use crate::generators;
+use std::hint::black_box;
 use std::io::{self, BufWriter, Write};
 use std::{thread, time};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Placeholder {
+    Str,
+    Ipv4,
+    Email,
+    Username,
+    Day,
+    Month,
+    Year,
+    Hour12,
+    Hour,
+    Minute,
+    Second,
+    Int,
+    TsRfc3339,
+    Domain,
+    Tld,
+    Word,
+    Sentence,
+    Paragraph,
+}
+
+impl Placeholder {
+    /// Looks up a placeholder by its name without the surrounding braces.
+    fn from_name(name: &str) -> Option<Self> {
+        let placeholder = match name {
+            "str" => Self::Str,
+            "ipv4" => Self::Ipv4,
+            "email" => Self::Email,
+            "username" => Self::Username,
+            "day" => Self::Day,
+            "month" => Self::Month,
+            "year" => Self::Year,
+            "hour12" => Self::Hour12,
+            "hour" => Self::Hour,
+            "minute" => Self::Minute,
+            "second" => Self::Second,
+            "int" => Self::Int,
+            // Misspelled name kept so existing config files keep working.
+            "ts_rfc3339" | "ts_rfc3389" => Self::TsRfc3339,
+            "domain" => Self::Domain,
+            "tld" => Self::Tld,
+            "word" => Self::Word,
+            "sentence" => Self::Sentence,
+            "paragraph" => Self::Paragraph,
+            _ => return None,
+        };
+        Some(placeholder)
+    }
+
+    fn generate(self, list_of_names: &[&str], list_of_words: &[&str]) -> String {
+        match self {
+            Self::Str => generators::random_str(10, 11),
+            Self::Ipv4 => generators::ipv4(),
+            Self::Email => generators::email(list_of_names),
+            Self::Username => generators::username(list_of_names),
+            Self::Day => generators::day().to_string(),
+            Self::Month => generators::month().to_string(),
+            Self::Year => generators::year().to_string(),
+            Self::Hour12 => generators::hour12().1.to_string(),
+            Self::Hour => generators::hour().to_string(),
+            Self::Minute => generators::minute().to_string(),
+            Self::Second => generators::second().to_string(),
+            Self::Int => generators::random_int(),
+            Self::TsRfc3339 => generators::ts_rfc3339(),
+            Self::Domain => generators::domain(),
+            Self::Tld => generators::tld(),
+            Self::Word => generators::word(list_of_words),
+            Self::Sentence => generators::sentence(list_of_words),
+            Self::Paragraph => generators::paragraph(list_of_words),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum Token {
+    Literal(String),
+    Placeholder(Placeholder),
+}
+
+/// A log pattern parsed once into literal text and placeholders, so each
+/// event only has to fill in the placeholders.
 #[derive(Debug)]
-pub struct Log {
-    pub pattern: String,
+pub struct Template {
+    tokens: Vec<Token>,
+}
+
+impl Template {
+    /// Unknown `{...}` sequences (like the braces in a JSON pattern) are kept as literal text.
+    pub fn parse(pattern: &str) -> Self {
+        let mut tokens = vec![];
+        let mut literal = String::new();
+        let mut rest = pattern;
+
+        while let Some(open) = rest.find('{') {
+            literal.push_str(&rest[..open]);
+            let after_open = &rest[open + 1..];
+            let placeholder = after_open
+                .find('}')
+                .and_then(|close| Some((Placeholder::from_name(&after_open[..close])?, close)));
+            match placeholder {
+                Some((placeholder, close)) => {
+                    if !literal.is_empty() {
+                        tokens.push(Token::Literal(std::mem::take(&mut literal)));
+                    }
+                    tokens.push(Token::Placeholder(placeholder));
+                    rest = &after_open[close + 1..];
+                }
+                None => {
+                    literal.push('{');
+                    rest = after_open;
+                }
+            }
+        }
+        literal.push_str(rest);
+        if !literal.is_empty() {
+            tokens.push(Token::Literal(literal));
+        }
+
+        Self { tokens }
+    }
+
+    /// Renders one log event into `out`, replacing its contents.
+    pub fn render_into(&self, out: &mut String, list_of_names: &[&str], list_of_words: &[&str]) {
+        out.clear();
+        for token in &self.tokens {
+            match token {
+                Token::Literal(text) => out.push_str(text),
+                Token::Placeholder(placeholder) => {
+                    out.push_str(&placeholder.generate(list_of_names, list_of_words))
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub fn render(&self, list_of_names: &[&str], list_of_words: &[&str]) -> String {
+        let mut out = String::new();
+        self.render_into(&mut out, list_of_names, list_of_words);
+        out
+    }
+}
+
+pub fn parse_patterns(patterns: &[String]) -> Vec<Template> {
+    patterns.iter().map(|p| Template::parse(p)).collect()
 }
 
 /// Paces events to a target rate by sleeping until each event's deadline,
@@ -16,11 +159,9 @@ struct Pacer {
 
 impl Pacer {
     fn new(eps: u128) -> Option<Self> {
-        if eps == 0 {
-            return None;
-        }
         let interval = time::Duration::from_nanos(
-            (1_000_000_000 / eps)
+            1_000_000_000_u128
+                .checked_div(eps)?
                 .try_into()
                 .expect("Unable to coerce u128 into u64"),
         );
@@ -48,20 +189,18 @@ impl Pacer {
 
 pub fn generate_logs(
     eps: u128,
-    patterns: &Vec<String>,
-    list_of_names: &Vec<&str>,
-    list_of_words: &Vec<&str>,
+    templates: &[Template],
+    list_of_names: &[&str],
+    list_of_words: &[&str],
 ) -> io::Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
     let mut pacer = Pacer::new(eps);
+    let mut line = String::new();
 
     loop {
-        for pattern in patterns {
-            writeln!(
-                out,
-                "{}",
-                Log::init(pattern.to_string()).generate(list_of_names, list_of_words)
-            )?;
+        for template in templates {
+            template.render_into(&mut line, list_of_names, list_of_words);
+            writeln!(out, "{}", line)?;
             if let Some(delay) = pacer.as_mut().and_then(Pacer::delay) {
                 // Flush before idling so rate-limited output arrives steadily
                 // instead of in buffer-sized bursts.
@@ -73,142 +212,80 @@ pub fn generate_logs(
 }
 
 pub fn benchmark(
-    patterns: &Vec<String>,
+    templates: &[Template],
     count: u128,
-    list_of_names: &Vec<&str>,
-    list_of_words: &Vec<&str>,
-) {
-    let mut counter: u128 = 0;
-    let start_time = time::Instant::now();
-    eprintln!("Benchmarking ...");
-    loop {
-        for pattern in patterns {
-            Log::init(pattern.to_string()).generate(list_of_names, list_of_words);
-            counter += 1;
-        }
-        if counter >= count {
-            break;
-        }
-    }
-    let end_time = time::Instant::now();
-    let duration = end_time - start_time;
-    eprintln!(
-        "{} log events generated in {} seconds",
-        count,
-        duration.as_secs_f64()
-    );
-    eprintln!("EPS: {}\n", (count as f64 / duration.as_secs_f64()).round());
-}
-
-pub fn benchmark_with_eps(
-    patterns: &Vec<String>,
     eps: u128,
-    list_of_names: &Vec<&str>,
-    list_of_words: &Vec<&str>,
+    list_of_names: &[&str],
+    list_of_words: &[&str],
 ) {
-    let count: u128 = eps;
     let mut counter: u128 = 0;
+    let mut pacer = Pacer::new(eps);
+    let mut line = String::new();
     let start_time = time::Instant::now();
     eprintln!("Benchmarking ...");
-    let mut pacer = Pacer::new(eps);
-    loop {
-        for pattern in patterns {
-            Log::init(pattern.to_string()).generate(list_of_names, list_of_words);
+    while counter < count {
+        for template in templates {
+            template.render_into(&mut line, list_of_names, list_of_words);
+            black_box(&line);
             counter += 1;
             if let Some(delay) = pacer.as_mut().and_then(Pacer::delay) {
                 thread::sleep(delay);
             }
         }
-        if counter >= count {
-            break;
-        }
     }
-    let end_time = time::Instant::now();
-    let duration = end_time - start_time;
+    let duration = start_time.elapsed();
     eprintln!(
         "{} log events generated in {} seconds",
-        count,
+        counter,
         duration.as_secs_f64()
     );
-    eprintln!("EPS: {}\n", (count as f64 / duration.as_secs_f64()).round());
+    eprintln!(
+        "EPS: {}\n",
+        (counter as f64 / duration.as_secs_f64()).round()
+    );
 }
 
-fn replace_all(
-    pattern: &str,
-    identifier: &str,
-    list_of_names: &Vec<&str>,
-    list_of_words: &Vec<&str>,
-) -> String {
-    let out: String = match identifier {
-        "{ipv4}" => pattern.replacen("{ipv4}", &generators::ipv4(), 1),
-        "{str}" => pattern.replacen("{str}", &generators::random_str(10, 11), 1),
-        "{email}" => pattern.replacen("{email}", &generators::email(&list_of_names), 1),
-        "{domain}" => pattern.replacen("{domain}", &generators::domain(), 1),
-        "{tld}" => pattern.replacen("{tld}", &generators::tld(), 1),
-        "{username}" => pattern.replacen("{username}", &generators::username(list_of_names), 1),
-        "{day}" => pattern.replacen("{day}", &generators::day().to_string(), 1),
-        "{month}" => pattern.replacen("{month}", &generators::month().to_string(), 1),
-        "{year}" => pattern.replacen("{year}", &generators::year().to_string(), 1),
-        "{hour12}" => pattern.replacen("{hour12}", &generators::hour12().1.to_string(), 1),
-        "{hour}" => pattern.replacen("{hour}", &generators::hour().to_string(), 1),
-        "{minute}" => pattern.replacen("{minute}", &generators::minute().to_string(), 1),
-        "{second}" => pattern.replacen("{second}", &generators::second().to_string(), 1),
-        "{int}" => pattern.replacen("{int}", &generators::random_int().to_string(), 1),
-        "{ts_rfc3339}" => pattern.replacen("{ts_rfc3339}", &generators::ts_rfc3339(), 1),
-        // Misspelled name kept so existing config files keep working.
-        "{ts_rfc3389}" => pattern.replacen("{ts_rfc3389}", &generators::ts_rfc3339(), 1),
-        "{word}" => pattern.replacen("{word}", &generators::word(&list_of_words).to_string(), 1),
-        "{sentence}" => pattern.replacen(
-            "{sentence}",
-            &generators::sentence(&list_of_words).to_string(),
-            1,
-        ),
-        "{paragraph}" => pattern.replacen(
-            "{paragraph}",
-            &generators::paragraph(&list_of_words).to_string(),
-            1,
-        ),
-        _ => pattern.to_string(),
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    if out.contains(identifier) {
-        replace_all(&out, identifier, &list_of_names, &list_of_words)
-    } else {
-        out.to_owned()
-    }
-}
+    const NAMES: &[&str] = &["Alice"];
+    const WORDS: &[&str] = &["word"];
 
-impl Log {
-    pub fn init(pattern: String) -> Self {
-        Self { pattern: pattern }
+    #[test]
+    fn test_parse_keeps_unknown_braces_as_literals() {
+        let template = Template::parse(r#"{"user":"{username}", "x":"{nope}"}"#);
+        assert_eq!(
+            template.tokens,
+            vec![
+                Token::Literal(r#"{"user":""#.to_string()),
+                Token::Placeholder(Placeholder::Username),
+                Token::Literal(r#"", "x":"{nope}"}"#.to_string()),
+            ]
+        );
     }
 
-    pub fn generate(&self, list_of_names: &Vec<&str>, list_of_words: &Vec<&str>) -> String {
-        let mut output = self.pattern.to_string();
-        let identifiers: Vec<&str> = vec![
-            "{str}",
-            "{ipv4}",
-            "{email}",
-            "{username}",
-            "{day}",
-            "{month}",
-            "{year}",
-            "{hour12}",
-            "{hour}",
-            "{minute}",
-            "{second}",
-            "{int}",
-            "{ts_rfc3339}",
-            "{ts_rfc3389}",
-            "{domain}",
-            "{tld}",
-            "{word}",
-            "{sentence}",
-            "{paragraph}",
-        ];
-        for identifier in identifiers {
-            output = replace_all(&output, identifier, &list_of_names, &list_of_words);
-        }
-        output
+    #[test]
+    fn test_render_replaces_every_placeholder() {
+        let template = Template::parse("{username} {word} {username} {ts_rfc3389}");
+        let out = template.render(NAMES, WORDS);
+        assert!(out.starts_with("Alice word Alice "));
+        assert!(!out.contains('{'));
+    }
+
+    #[test]
+    fn test_render_generates_each_ipv4_separately() {
+        let template = Template::parse("{ipv4} {ipv4} {ipv4} {ipv4}");
+        let distinct = (0..10).map(|_| template.render(NAMES, WORDS)).any(|out| {
+            let ips: Vec<&str> = out.split(' ').collect();
+            ips.iter().any(|ip| *ip != ips[0])
+        });
+        assert!(distinct);
+    }
+
+    #[test]
+    fn test_unterminated_brace() {
+        let template = Template::parse("a {b");
+        assert_eq!(template.render(NAMES, WORDS), "a {b");
     }
 }

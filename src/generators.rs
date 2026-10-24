@@ -18,22 +18,19 @@ fn test_ipv4() {
 
     let ip_addr = ipv4();
     let random_ipv4: Vec<&str> = ip_addr.split(".").collect();
-    assert_eq!(
-        IpAddr::V4(Ipv4Addr::new(
-            random_ipv4[0].parse::<u8>().unwrap(),
-            random_ipv4[1].parse::<u8>().unwrap(),
-            random_ipv4[2].parse::<u8>().unwrap(),
-            random_ipv4[3].parse::<u8>().unwrap()
-        ))
-        .is_ipv4(),
-        true
-    );
+    assert!(IpAddr::V4(Ipv4Addr::new(
+        random_ipv4[0].parse::<u8>().unwrap(),
+        random_ipv4[1].parse::<u8>().unwrap(),
+        random_ipv4[2].parse::<u8>().unwrap(),
+        random_ipv4[3].parse::<u8>().unwrap()
+    ))
+    .is_ipv4());
 }
 
 pub fn random_str(min_length: usize, max_length: usize) -> String {
     let mut rnd = rand::thread_rng();
     let length = rnd.gen_range(min_length..max_length + 1);
-    random_string::generate(length, "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_string())
+    random_string::generate(length, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 }
 
 #[test]
@@ -48,17 +45,17 @@ fn test_random_str() {
     assert!(random_string.len() == 5 || random_string.len() == 6);
 }
 
-pub fn username(list_of_names: &Vec<&str>) -> String {
+pub fn username(list_of_names: &[&str]) -> String {
     let mut rng = rand::thread_rng();
     list_of_names.choose(&mut rng).unwrap().to_string()
 }
 
-pub fn word(list_of_words: &Vec<&str>) -> String {
+pub fn word(list_of_words: &[&str]) -> String {
     let mut rng = rand::thread_rng();
     list_of_words.choose(&mut rng).unwrap().to_string()
 }
 
-pub fn sentence(list_of_words: &Vec<&str>) -> String {
+pub fn sentence(list_of_words: &[&str]) -> String {
     let connector = " ";
     let punctuation = ".";
 
@@ -67,12 +64,12 @@ pub fn sentence(list_of_words: &Vec<&str>) -> String {
 
     let mut words: Vec<String> = vec![];
     for _ in 0..number_of_words {
-        words.push(word(&list_of_words));
+        words.push(word(list_of_words));
     }
     format!("{}{}", words.join(connector), punctuation)
 }
 
-pub fn paragraph(list_of_words: &Vec<&str>) -> String {
+pub fn paragraph(list_of_words: &[&str]) -> String {
     let connector: &str = " ";
 
     let mut rnd = rand::thread_rng();
@@ -80,7 +77,7 @@ pub fn paragraph(list_of_words: &Vec<&str>) -> String {
 
     let mut sentences: Vec<String> = vec![];
     for _ in 0..number_of_sentences {
-        sentences.push(sentence(&list_of_words));
+        sentences.push(sentence(list_of_words));
     }
     sentences.join(connector)
 }
@@ -90,12 +87,12 @@ pub fn domain() -> String {
 }
 
 pub fn tld() -> String {
-    let choice = vec!["com", "it", "guru", "in", "com.au", "co.in", "co.uk"];
+    let choice = ["com", "it", "guru", "in", "com.au", "co.in", "co.uk"];
     let mut rng = rand::thread_rng();
     choice.choose(&mut rng).unwrap().to_string()
 }
 
-pub fn email(list_of_names: &Vec<&str>) -> String {
+pub fn email(list_of_names: &[&str]) -> String {
     format!("{}@{}.{}", username(list_of_names), domain(), tld())
 }
 
