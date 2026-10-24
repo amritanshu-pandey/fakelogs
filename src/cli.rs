@@ -15,6 +15,13 @@ pub enum Subcommands {
         /// Config file
         #[structopt(short, long, help = "Path to the config file")]
         configfile: PathBuf,
+        #[structopt(
+            short,
+            long,
+            default_value = "1",
+            help = "Number of generator threads, 0 for one per CPU"
+        )]
+        threads: usize,
     },
     Benchmark {
         /// Config file
@@ -22,6 +29,13 @@ pub enum Subcommands {
         configfile: PathBuf,
         #[structopt(long, help = "benchmark with eps limit from config file")]
         eps: bool,
+        #[structopt(
+            short,
+            long,
+            default_value = "1",
+            help = "Number of generator threads, 0 for one per CPU"
+        )]
+        threads: usize,
     },
 }
 

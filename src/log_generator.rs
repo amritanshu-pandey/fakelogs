@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use rand::Rng;
 use std::hint::black_box;
 use std::io::{self, BufWriter, Write};
+use std::sync::mpsc;
 use std::{thread, time};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -137,9 +138,8 @@ impl Template {
         Self { tokens }
     }
 
-    /// Renders one log event into `out`, replacing its contents.
+    /// Appends one rendered log event (without a newline) to `out`.
     pub fn render_into(&self, out: &mut String, list_of_names: &[&str], list_of_words: &[&str]) {
-        out.clear();
         let mut rng = rand::thread_rng();
         let mut now = None;
         for token in &self.tokens {
@@ -201,44 +201,118 @@ impl Pacer {
     }
 }
 
-pub fn generate_logs(
+/// Splits `total` into `parts` shares that differ by at most one.
+fn split_evenly(total: u128, parts: usize) -> Vec<u128> {
+    let parts_u128 = parts as u128;
+    (0..parts_u128)
+        .map(|i| total / parts_u128 + u128::from(i < total % parts_u128))
+        .collect()
+}
+
+/// Per-thread event rates. With a cap, there are never more threads than
+/// events per second, so every thread gets a nonzero (capped) share.
+fn thread_rates(eps: u128, threads: usize) -> Vec<u128> {
+    if eps == 0 {
+        vec![0; threads]
+    } else {
+        split_evenly(eps, threads.min(eps.try_into().unwrap_or(usize::MAX)))
+    }
+}
+
+/// Batches are handed from generator threads to the writer at about this size.
+const BATCH_SIZE: usize = 64 * 1024;
+
+/// Generates newline-terminated events into batches and sends them to the
+/// writer until the writer hangs up.
+fn generate_batches(
+    batches: mpsc::SyncSender<String>,
     eps: u128,
     templates: &[Template],
     list_of_names: &[&str],
     list_of_words: &[&str],
-) -> io::Result<()> {
-    let mut out = BufWriter::new(io::stdout().lock());
+) {
     let mut pacer = Pacer::new(eps);
-    let mut line = String::new();
+    let mut batch = String::with_capacity(BATCH_SIZE);
 
     loop {
         for template in templates {
-            template.render_into(&mut line, list_of_names, list_of_words);
-            writeln!(out, "{}", line)?;
-            if let Some(delay) = pacer.as_mut().and_then(Pacer::delay) {
-                // Flush before idling so rate-limited output arrives steadily
-                // instead of in buffer-sized bursts.
-                out.flush()?;
+            template.render_into(&mut batch, list_of_names, list_of_words);
+            batch.push('\n');
+            let delay = pacer.as_mut().and_then(Pacer::delay);
+            // Send before idling so rate-limited output arrives steadily
+            // instead of in batch-sized bursts.
+            if batch.len() >= BATCH_SIZE || delay.is_some() {
+                let full = std::mem::replace(&mut batch, String::with_capacity(BATCH_SIZE));
+                if batches.send(full).is_err() {
+                    return;
+                }
+            }
+            if let Some(delay) = delay {
                 thread::sleep(delay);
             }
         }
     }
 }
 
-pub fn benchmark(
-    templates: &[Template],
-    count: u128,
+/// Writes batches to stdout in the order they arrive, flushing whenever no
+/// batch is waiting.
+fn write_batches(batches: mpsc::Receiver<String>) -> io::Result<()> {
+    let mut out = BufWriter::new(io::stdout().lock());
+    loop {
+        let batch = match batches.try_recv() {
+            Ok(batch) => batch,
+            Err(mpsc::TryRecvError::Empty) => {
+                out.flush()?;
+                match batches.recv() {
+                    Ok(batch) => batch,
+                    Err(_) => break,
+                }
+            }
+            Err(mpsc::TryRecvError::Disconnected) => break,
+        };
+        out.write_all(batch.as_bytes())?;
+    }
+    out.flush()
+}
+
+pub fn generate_logs(
     eps: u128,
+    threads: usize,
+    templates: &[Template],
     list_of_names: &[&str],
     list_of_words: &[&str],
-) {
+) -> io::Result<()> {
+    let rates = thread_rates(eps, threads);
+    let (sender, receiver) = mpsc::sync_channel(rates.len() * 4);
+
+    thread::scope(|scope| {
+        for rate in rates {
+            let sender = sender.clone();
+            scope.spawn(move || {
+                generate_batches(sender, rate, templates, list_of_names, list_of_words)
+            });
+        }
+        drop(sender);
+        // Returning drops the receiver, which stops the generator threads.
+        write_batches(receiver)
+    })
+}
+
+/// Renders `count` events at up to `eps` events per second (0 = uncapped)
+/// and returns how many were generated.
+fn benchmark_thread(
+    count: u128,
+    eps: u128,
+    templates: &[Template],
+    list_of_names: &[&str],
+    list_of_words: &[&str],
+) -> u128 {
     let mut counter: u128 = 0;
     let mut pacer = Pacer::new(eps);
     let mut line = String::new();
-    let start_time = time::Instant::now();
-    eprintln!("Benchmarking ...");
     while counter < count {
         for template in templates {
+            line.clear();
             template.render_into(&mut line, list_of_names, list_of_words);
             black_box(&line);
             counter += 1;
@@ -247,6 +321,34 @@ pub fn benchmark(
             }
         }
     }
+    counter
+}
+
+pub fn benchmark(
+    templates: &[Template],
+    count: u128,
+    eps: u128,
+    threads: usize,
+    list_of_names: &[&str],
+    list_of_words: &[&str],
+) {
+    let rates = thread_rates(eps, threads.min(count.try_into().unwrap_or(usize::MAX)));
+    let counts = split_evenly(count, rates.len());
+    eprintln!("Benchmarking with {} thread(s) ...", rates.len());
+
+    let start_time = time::Instant::now();
+    let counter: u128 = thread::scope(|scope| {
+        let workers: Vec<_> = counts
+            .into_iter()
+            .zip(rates)
+            .map(|(count, rate)| {
+                scope.spawn(move || {
+                    benchmark_thread(count, rate, templates, list_of_names, list_of_words)
+                })
+            })
+            .collect();
+        workers.into_iter().map(|w| w.join().unwrap()).sum()
+    });
     let duration = start_time.elapsed();
     eprintln!(
         "{} log events generated in {} seconds",
@@ -295,6 +397,19 @@ mod tests {
             ips.iter().any(|ip| *ip != ips[0])
         });
         assert!(distinct);
+    }
+
+    #[test]
+    fn test_split_evenly() {
+        assert_eq!(split_evenly(10, 3), vec![4, 3, 3]);
+        assert_eq!(split_evenly(0, 2), vec![0, 0]);
+    }
+
+    #[test]
+    fn test_thread_rates_never_uncaps_a_thread() {
+        assert_eq!(thread_rates(0, 3), vec![0, 0, 0]);
+        assert_eq!(thread_rates(2, 4), vec![1, 1]);
+        assert_eq!(thread_rates(1500, 4), vec![375, 375, 375, 375]);
     }
 
     #[test]
