@@ -20,7 +20,7 @@ fn main() {
             threads,
         } => {
             let cfg = config::get_config_yaml(configfile);
-            let templates = log_generator::parse_patterns(&cfg.patterns);
+            let templates = parse_patterns_or_exit(&cfg.patterns);
             let threads = resolve_threads(threads);
             if eps && cfg.eps > 0 {
                 // Generate one second's worth of events at the configured rate.
@@ -48,7 +48,7 @@ fn main() {
             threads,
         } => {
             let cfg = config::get_config_yaml(configfile);
-            let templates = log_generator::parse_patterns(&cfg.patterns);
+            let templates = parse_patterns_or_exit(&cfg.patterns);
             if let Err(e) = log_generator::generate_logs(
                 cfg.eps,
                 resolve_threads(threads),
@@ -64,6 +64,13 @@ fn main() {
             }
         }
     }
+}
+
+fn parse_patterns_or_exit(patterns: &[String]) -> Vec<log_generator::Template> {
+    log_generator::parse_patterns(patterns).unwrap_or_else(|e| {
+        eprintln!("Invalid pattern in config file: {}", e);
+        std::process::exit(2);
+    })
 }
 
 /// `--threads 0` means one thread per CPU.

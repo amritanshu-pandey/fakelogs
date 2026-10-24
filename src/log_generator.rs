@@ -6,20 +6,26 @@ use std::io::{self, BufWriter, Write};
 use std::sync::mpsc;
 use std::{thread, time};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Placeholder {
     Str,
     Ipv4,
+    Ipv6,
+    Uuid,
+    Hex(usize),
+    Unix,
     Email,
     Username,
     Day,
     Month,
+    MonthName,
     Year,
     Hour12,
     Hour,
     Minute,
     Second,
-    Int,
+    Int { min: u64, max: u64 },
+    Choice(Vec<String>),
     TsRfc3339,
     Domain,
     Tld,
@@ -29,37 +35,61 @@ enum Placeholder {
 }
 
 impl Placeholder {
-    /// Looks up a placeholder by its name without the surrounding braces.
-    fn from_name(name: &str) -> Option<Self> {
-        let placeholder = match name {
-            "str" => Self::Str,
-            "ipv4" => Self::Ipv4,
-            "email" => Self::Email,
-            "username" => Self::Username,
-            "day" => Self::Day,
-            "month" => Self::Month,
-            "year" => Self::Year,
-            "hour12" => Self::Hour12,
-            "hour" => Self::Hour,
-            "minute" => Self::Minute,
-            "second" => Self::Second,
-            "int" => Self::Int,
-            // Misspelled name kept so existing config files keep working.
-            "ts_rfc3339" | "ts_rfc3389" => Self::TsRfc3339,
-            "domain" => Self::Domain,
-            "tld" => Self::Tld,
-            "word" => Self::Word,
-            "sentence" => Self::Sentence,
-            "paragraph" => Self::Paragraph,
-            _ => return None,
+    /// Parses the text between the braces, e.g. `ipv4` or `int:1-500`.
+    /// Returns Ok(None) if it isn't a placeholder name, so it can be kept as literal text.
+    fn parse(text: &str) -> Result<Option<Self>, String> {
+        let (name, args) = match text.split_once(':') {
+            Some((name, args)) => (name, Some(args)),
+            None => (text, None),
         };
-        Some(placeholder)
+        let placeholder = match (name, args) {
+            ("int", Some(args)) => parse_int_range(args)?,
+            ("hex", Some(args)) => match args.parse() {
+                Ok(length) if length > 0 => Self::Hex(length),
+                _ => return Err(format!("{{{}}}: expected a length like {{hex:16}}", text)),
+            },
+            ("hex", None) => return Err("{hex} needs a length, e.g. {hex:16}".to_string()),
+            // Empty options are allowed, e.g. {choice:|.html} for "sometimes nothing".
+            ("choice", Some(args)) => Self::Choice(args.split('|').map(String::from).collect()),
+            ("choice", None) => {
+                return Err("{choice} needs options, e.g. {choice:GET|POST}".to_string())
+            }
+            (_, Some(_)) if Self::parse(name)?.is_some() => {
+                return Err(format!("{{{}}}: {{{}}} doesn't take arguments", text, name))
+            }
+            (_, Some(_)) => return Ok(None),
+            ("str", None) => Self::Str,
+            ("ipv4", None) => Self::Ipv4,
+            ("ipv6", None) => Self::Ipv6,
+            ("uuid", None) => Self::Uuid,
+            ("unix", None) => Self::Unix,
+            ("email", None) => Self::Email,
+            ("username", None) => Self::Username,
+            ("day", None) => Self::Day,
+            ("month", None) => Self::Month,
+            ("month_name", None) => Self::MonthName,
+            ("year", None) => Self::Year,
+            ("hour12", None) => Self::Hour12,
+            ("hour", None) => Self::Hour,
+            ("minute", None) => Self::Minute,
+            ("second", None) => Self::Second,
+            ("int", None) => Self::Int { min: 1, max: 99 },
+            // Misspelled name kept so existing config files keep working.
+            ("ts_rfc3339" | "ts_rfc3389", None) => Self::TsRfc3339,
+            ("domain", None) => Self::Domain,
+            ("tld", None) => Self::Tld,
+            ("word", None) => Self::Word,
+            ("sentence", None) => Self::Sentence,
+            ("paragraph", None) => Self::Paragraph,
+            _ => return Ok(None),
+        };
+        Ok(Some(placeholder))
     }
 
     /// Appends a generated value to `out`. `now` is read at most once per event,
     /// so all time placeholders in one event agree with each other.
     fn write_to(
-        self,
+        &self,
         out: &mut String,
         rng: &mut impl Rng,
         now: &mut Option<DateTime<Utc>>,
@@ -70,16 +100,22 @@ impl Placeholder {
         match self {
             Self::Str => generators::random_str(out, rng, 10, 11),
             Self::Ipv4 => generators::ipv4(out, rng),
+            Self::Ipv6 => generators::ipv6(out, rng),
+            Self::Uuid => generators::uuid(out, rng),
+            Self::Hex(length) => generators::hex(out, rng, *length),
+            Self::Unix => generators::unix(out, &now()),
             Self::Email => generators::email(out, rng, list_of_names),
             Self::Username => generators::username(out, rng, list_of_names),
             Self::Day => generators::day(out, &now()),
             Self::Month => generators::month(out, &now()),
+            Self::MonthName => generators::month_name(out, &now()),
             Self::Year => generators::year(out, &now()),
             Self::Hour12 => generators::hour12(out, &now()),
             Self::Hour => generators::hour(out, &now()),
             Self::Minute => generators::minute(out, &now()),
             Self::Second => generators::second(out, &now()),
-            Self::Int => generators::random_int(out, rng),
+            Self::Int { min, max } => generators::random_int(out, rng, *min, *max),
+            Self::Choice(options) => generators::choice(out, rng, options),
             Self::TsRfc3339 => generators::ts_rfc3339(out, &now()),
             Self::Domain => generators::domain(out, rng),
             Self::Tld => generators::tld(out, rng),
@@ -88,6 +124,18 @@ impl Placeholder {
             Self::Paragraph => generators::paragraph(out, rng, list_of_words),
         }
     }
+}
+
+/// Parses the `MIN-MAX` in `{int:MIN-MAX}`; both ends are included.
+fn parse_int_range(args: &str) -> Result<Placeholder, String> {
+    let invalid = || format!("{{int:{}}}: expected a range like {{int:1-500}}", args);
+    let (min, max) = args.split_once('-').ok_or_else(invalid)?;
+    let min: u64 = min.trim().parse().map_err(|_| invalid())?;
+    let max: u64 = max.trim().parse().map_err(|_| invalid())?;
+    if min > max {
+        return Err(format!("{{int:{}}}: {} is bigger than {}", args, min, max));
+    }
+    Ok(Placeholder::Int { min, max })
 }
 
 #[derive(Debug, PartialEq)]
@@ -105,7 +153,8 @@ pub struct Template {
 
 impl Template {
     /// Unknown `{...}` sequences (like the braces in a JSON pattern) are kept as literal text.
-    pub fn parse(pattern: &str) -> Self {
+    /// Known placeholders with bad arguments, like `{int:9-1}`, are an error.
+    pub fn parse(pattern: &str) -> Result<Self, String> {
         let mut tokens = vec![];
         let mut literal = String::new();
         let mut rest = pattern;
@@ -113,9 +162,10 @@ impl Template {
         while let Some(open) = rest.find('{') {
             literal.push_str(&rest[..open]);
             let after_open = &rest[open + 1..];
-            let placeholder = after_open
-                .find('}')
-                .and_then(|close| Some((Placeholder::from_name(&after_open[..close])?, close)));
+            let placeholder = match after_open.find('}') {
+                Some(close) => Placeholder::parse(&after_open[..close])?.map(|p| (p, close)),
+                None => None,
+            };
             match placeholder {
                 Some((placeholder, close)) => {
                     if !literal.is_empty() {
@@ -135,7 +185,7 @@ impl Template {
             tokens.push(Token::Literal(literal));
         }
 
-        Self { tokens }
+        Ok(Self { tokens })
     }
 
     /// Appends one rendered log event (without a newline) to `out`.
@@ -160,7 +210,7 @@ impl Template {
     }
 }
 
-pub fn parse_patterns(patterns: &[String]) -> Vec<Template> {
+pub fn parse_patterns(patterns: &[String]) -> Result<Vec<Template>, String> {
     patterns.iter().map(|p| Template::parse(p)).collect()
 }
 
@@ -370,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_parse_keeps_unknown_braces_as_literals() {
-        let template = Template::parse(r#"{"user":"{username}", "x":"{nope}"}"#);
+        let template = Template::parse(r#"{"user":"{username}", "x":"{nope}"}"#).unwrap();
         assert_eq!(
             template.tokens,
             vec![
@@ -383,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_render_replaces_every_placeholder() {
-        let template = Template::parse("{username} {word} {username} {ts_rfc3389}");
+        let template = Template::parse("{username} {word} {username} {ts_rfc3389}").unwrap();
         let out = template.render(NAMES, WORDS);
         assert!(out.starts_with("Alice word Alice "));
         assert!(!out.contains('{'));
@@ -391,12 +441,52 @@ mod tests {
 
     #[test]
     fn test_render_generates_each_ipv4_separately() {
-        let template = Template::parse("{ipv4} {ipv4} {ipv4} {ipv4}");
+        let template = Template::parse("{ipv4} {ipv4} {ipv4} {ipv4}").unwrap();
         let distinct = (0..10).map(|_| template.render(NAMES, WORDS)).any(|out| {
             let ips: Vec<&str> = out.split(' ').collect();
             ips.iter().any(|ip| *ip != ips[0])
         });
         assert!(distinct);
+    }
+
+    #[test]
+    fn test_parse_placeholders_with_arguments() {
+        let template = Template::parse("{int:1024-65535} {choice:GET|POST} {int}").unwrap();
+        assert_eq!(
+            template.tokens,
+            vec![
+                Token::Placeholder(Placeholder::Int {
+                    min: 1024,
+                    max: 65535
+                }),
+                Token::Literal(" ".to_string()),
+                Token::Placeholder(Placeholder::Choice(vec![
+                    "GET".to_string(),
+                    "POST".to_string()
+                ])),
+                Token::Literal(" ".to_string()),
+                Token::Placeholder(Placeholder::Int { min: 1, max: 99 }),
+            ]
+        );
+        let out = template.render(NAMES, WORDS);
+        assert!(out.contains(" GET ") || out.contains(" POST "));
+    }
+
+    #[test]
+    fn test_parse_rejects_bad_arguments() {
+        for pattern in [
+            "{int:9-1}",
+            "{int:x-5}",
+            "{int:5}",
+            "{choice}",
+            "{hour:2}",
+            "{hex}",
+            "{hex:0}",
+        ] {
+            assert!(Template::parse(pattern).is_err(), "{}", pattern);
+        }
+        // Unknown names with a colon, like JSON keys, are still literal text.
+        assert!(Template::parse(r#"{"level":"info"}"#).is_ok());
     }
 
     #[test]
@@ -414,7 +504,27 @@ mod tests {
 
     #[test]
     fn test_unterminated_brace() {
-        let template = Template::parse("a {b");
+        let template = Template::parse("a {b").unwrap();
         assert_eq!(template.render(NAMES, WORDS), "a {b");
+    }
+
+    #[test]
+    fn test_example_configs_are_valid() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("example");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|ext| ext == "yaml") {
+                let cfg = crate::config::get_config_yaml(path.clone());
+                let templates = parse_patterns(&cfg.patterns)
+                    .unwrap_or_else(|e| panic!("{}: {}", path.display(), e));
+                for template in &templates {
+                    let out = template.render(NAMES, WORDS);
+                    assert!(!out.is_empty(), "{}", path.display());
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 0);
     }
 }

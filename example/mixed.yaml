@@ -3,34 +3,42 @@
 # Available placeholders:
 #   {ts_rfc3339}  timestamp, e.g. 2026-10-24T01:53:53.024855810+00:00
 #   {year} {month} {day} {hour} {hour12} {minute} {second}
-#                 parts of the current UTC time (not zero padded)
+#                 parts of the current UTC time, zero padded (e.g. 03, 09)
+#   {month_name}  short month name, e.g. Oct
 #   {ipv4}        random IPv4 address
+#   {ipv6}        random IPv6 address, e.g. 9ebd:7ec9:8b5d:9654:7e1d:92ee:7d22:2aa0
+#   {uuid}        random UUID, e.g. 1130b3d0-4db6-4b58-a099-309875054e6a
+#   {hex:N}       N random lowercase hex digits, e.g. {hex:16}
+#   {unix}        seconds since the Unix epoch
 #   {username}    random first name
 #   {email}       name@RANDOMDOMAIN.tld
 #   {domain}      5-10 random uppercase letters
 #   {tld}         one of com, it, guru, in, com.au, co.in, co.uk
 #   {str}         10-11 random uppercase letters
 #   {int}         random number from 1 to 99
+#   {int:MIN-MAX} random number from MIN to MAX (both included), e.g. {int:1024-65535}
+#   {choice:A|B}  one of the listed values, e.g. {choice:GET|POST|PUT}; can't contain placeholders
 #   {word}        random word
 #   {sentence}    5-14 random words ending with a full stop
 #   {paragraph}   5-14 random sentences
 #
 # Anything else in braces (like JSON objects) is copied through as-is.
+# A known placeholder with bad arguments, like {int:9-1}, is an error.
 # Placeholders in the same event share one timestamp.
 
 # Logs are generated for each pattern in turn, so each one gets an equal share.
 patterns:
   # syslog-style sshd login
-  - '{ts_rfc3339} web-{int} sshd[{int}{int}]: Accepted password for {username} from {ipv4} port {int}{int} ssh2'
+  - '{ts_rfc3339} web-{int} sshd[{int:100-32768}]: {choice:Accepted|Failed} password for {username} from {ipv4} port {int:1024-65535} ssh2'
 
   # Apache/nginx combined access log
-  - '{ipv4} - {username} [{day}/{month}/{year}:{hour}:{minute}:{second} +0000] "GET /{word}/{word}?id={int} HTTP/1.1" 200 {int}{int} "https://{domain}.{tld}/" "curl/8.{int}"'
+  - '{ipv4} - {username} [{day}/{month_name}/{year}:{hour}:{minute}:{second} +0000] "{choice:GET|POST|PUT|DELETE} /{word}/{word}?id={int} HTTP/1.1" {choice:200|200|200|301|404|500} {int:200-20000} "https://{domain}.{tld}/" "curl/8.{int:0-15}"'
 
   # logfmt application log
-  - 'ts={ts_rfc3339} level=info service={word} user={username} email={email} msg="{sentence}"'
+  - 'ts={ts_rfc3339} level={choice:debug|info|info|warn|error} service={word} user={username} email={email} msg="{sentence}"'
 
   # JSON audit event
-  - '{"ts":"{ts_rfc3339}","event":"login","user":"{username}","src_ip":"{ipv4}","session":"{str}","host":"{domain}.{tld}"}'
+  - '{"ts":"{ts_rfc3339}","event":"{choice:login|logout}","user":"{username}","src_ip":"{ipv4}","src_ip6":"{ipv6}","request_id":"{uuid}","session":"{str}","host":"{domain}.{tld}"}'
 
   # 12-hour clock with a free-text body
   - '[{hour12}:{minute}:{second}] {username} posted on {domain}.{tld}: {paragraph}'
