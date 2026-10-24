@@ -3,17 +3,12 @@ mod config;
 mod generators;
 mod log_generator;
 
-#[cfg(windows)]
-const LINE_ENDING : &'static str = "\r\n";
-#[cfg(not(windows))]
-const LINE_ENDING : &'static str = "\n";
-
 fn main() {
     let list_of_names: Vec<&str> = include_str!("./dataset/data/names_sampled.txt")
-        .split(LINE_ENDING)
+        .lines()
         .collect::<Vec<_>>();
     let list_of_words: Vec<&str> = include_str!("./dataset/data/words_sampled.txt")
-        .split(LINE_ENDING)
+        .lines()
         .collect::<Vec<_>>();
 
     let args = cli::get_cli_args();
@@ -34,7 +29,15 @@ fn main() {
         }
         cli::Subcommands::Generate { configfile } => {
             let cfg = config::get_config_yaml(configfile);
-            log_generator::generate_logs(cfg.eps, &cfg.patterns, &list_of_names, &list_of_words);
+            if let Err(e) =
+                log_generator::generate_logs(cfg.eps, &cfg.patterns, &list_of_names, &list_of_words)
+            {
+                // A closed pipe (e.g. `fakelogs generate ... | head`) is a normal way to stop.
+                if e.kind() != std::io::ErrorKind::BrokenPipe {
+                    eprintln!("Error writing logs: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }

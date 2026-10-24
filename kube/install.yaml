@@ -13,7 +13,7 @@ data:
   config.yaml: |
     --- 
     patterns:
-      - '{"name":"{username}", "age":"{int}", "Moto": "{sentence}", "Summary": "{paragraph}", "ip_addr": "{ipv4}", "email": "{email}", "timestamp":"{ts_rfc3389}"}'
+      - '{"name":"{username}", "age":"{int}", "Moto": "{sentence}", "Summary": "{paragraph}", "ip_addr": "{ipv4}", "email": "{email}", "timestamp":"{ts_rfc3339}"}'
     eps: 0
 ---
 apiVersion: apps/v1

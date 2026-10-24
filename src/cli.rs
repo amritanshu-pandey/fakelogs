@@ -4,11 +4,6 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(name = "fakelogs", about = "A crazy fast fake logs generator.")]
 pub struct Cli {
-    /// Activate debug mode
-    // short and long flags (-d, --debug) will be deduced from the field's name
-    #[structopt(short, long)]
-    pub debug: bool,
-
     #[structopt(subcommand)]
     pub commands: Subcommands,
 }

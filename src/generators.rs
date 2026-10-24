@@ -1,7 +1,6 @@
 use chrono::{self, Datelike, Timelike};
 use rand::seq::SliceRandom;
 use rand::Rng;
-use std::net::{IpAddr, Ipv4Addr};
 
 pub fn ipv4() -> String {
     let mut rnd = rand::thread_rng();
@@ -15,6 +14,8 @@ pub fn ipv4() -> String {
 
 #[test]
 fn test_ipv4() {
+    use std::net::{IpAddr, Ipv4Addr};
+
     let ip_addr = ipv4();
     let random_ipv4: Vec<&str> = ip_addr.split(".").collect();
     assert_eq!(
@@ -65,7 +66,7 @@ pub fn sentence(list_of_words: &Vec<&str>) -> String {
     let number_of_words = rnd.gen_range(5..15);
 
     let mut words: Vec<String> = vec![];
-    for _ in 1..number_of_words {
+    for _ in 0..number_of_words {
         words.push(word(&list_of_words));
     }
     format!("{}{}", words.join(connector), punctuation)
@@ -78,7 +79,7 @@ pub fn paragraph(list_of_words: &Vec<&str>) -> String {
     let number_of_sentences = rnd.gen_range(5..15);
 
     let mut sentences: Vec<String> = vec![];
-    for _ in 1..number_of_sentences {
+    for _ in 0..number_of_sentences {
         sentences.push(sentence(&list_of_words));
     }
     sentences.join(connector)
@@ -131,6 +132,6 @@ pub fn random_int() -> String {
     rnd.gen_range(1..100).to_string()
 }
 
-pub fn ts_rfc3389() -> String {
+pub fn ts_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
 }
