@@ -16,42 +16,31 @@ fn main() {
     let args = cli::get_cli_args();
 
     match args.commands {
-        cli::Subcommands::Benchmark {
-            configfile,
-            eps,
-            threads,
-        } => {
-            let (cfg, templates) = load_config_or_exit(&configfile);
-            let threads = resolve_threads(threads);
-            if eps && cfg.eps > 0 {
-                // Generate one second's worth of events at the configured rate.
-                log_generator::benchmark(
-                    &templates,
-                    cfg.eps,
-                    cfg.eps,
-                    threads,
-                    &list_of_names,
-                    &list_of_words,
-                );
-            } else {
-                log_generator::benchmark(
-                    &templates,
-                    100000,
-                    0,
-                    threads,
-                    &list_of_names,
-                    &list_of_words,
-                );
-            }
+        cli::Subcommands::Benchmark { source, eps } => {
+            let (cfg, templates) = load_patterns_or_exit(&source);
+            let threads = resolve_threads(source.threads);
+            // `--eps N` or bare `--eps` (the config's rate) benchmarks one second's
+            // worth of events at that rate; otherwise 100k events, uncapped.
+            let rate = match eps {
+                Some(Some(rate)) => rate,
+                Some(None) => cfg.eps,
+                None => 0,
+            };
+            let count = if rate > 0 { rate } else { 100000 };
+            log_generator::benchmark(
+                &templates,
+                count,
+                rate,
+                threads,
+                &list_of_names,
+                &list_of_words,
+            );
         }
-        cli::Subcommands::Generate {
-            configfile,
-            threads,
-        } => {
-            let (cfg, templates) = load_config_or_exit(&configfile);
+        cli::Subcommands::Generate { source, eps } => {
+            let (cfg, templates) = load_patterns_or_exit(&source);
             if let Err(e) = log_generator::generate_logs(
-                cfg.eps,
-                resolve_threads(threads),
+                eps.unwrap_or(cfg.eps),
+                resolve_threads(source.threads),
                 &templates,
                 &list_of_names,
                 &list_of_words,
@@ -66,28 +55,48 @@ fn main() {
     }
 }
 
-/// Loads the config and parses its patterns, printing any warnings.
-/// Exits with status 2 if either is invalid.
-fn load_config_or_exit(path: &Path) -> (config::Config, Vec<log_generator::Template>) {
-    let loaded = config::load(path).and_then(|cfg| {
-        let templates = log_generator::parse_patterns(&cfg.patterns)
-            .map_err(|e| format!("Invalid config file {}: {}", path.display(), e))?;
-        Ok((cfg, templates))
-    });
-    match loaded {
-        Ok((cfg, templates)) => {
-            for (i, template) in templates.iter().enumerate() {
-                for warning in &template.warnings {
-                    eprintln!("warning: {} pattern {}: {}", path.display(), i + 1, warning);
-                }
-            }
-            (cfg, templates)
+/// Loads patterns from the config file and/or `--pattern` options (which replace
+/// the file's patterns), printing any warnings. Exits with status 2 on errors.
+fn load_patterns_or_exit(source: &cli::Source) -> (config::Config, Vec<log_generator::Template>) {
+    let mut cfg = match &source.configfile {
+        Some(path) => config::load(path).unwrap_or_else(|e| exit_with_error(&e)),
+        None if source.patterns.is_empty() => {
+            exit_with_error("no patterns given: pass a config file with -c, or a pattern with -p")
         }
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(2);
+        None => config::Config {
+            patterns: vec![],
+            eps: config::default_eps(),
+        },
+    };
+    // Errors and warnings say where the pattern came from.
+    let origin = if source.patterns.is_empty() {
+        let path = source.configfile.as_deref().unwrap_or(Path::new(""));
+        format!("config file {}", path.display())
+    } else {
+        cfg.patterns = source
+            .patterns
+            .iter()
+            .map(|pattern| config::PatternConfig {
+                pattern: pattern.clone(),
+                weight: 1,
+            })
+            .collect();
+        "--pattern".to_string()
+    };
+
+    let templates = log_generator::parse_patterns(&cfg.patterns)
+        .unwrap_or_else(|e| exit_with_error(&format!("Invalid {}: {}", origin, e)));
+    for (i, template) in templates.iter().enumerate() {
+        for warning in &template.warnings {
+            eprintln!("warning: {}: pattern {}: {}", origin, i + 1, warning);
         }
     }
+    (cfg, templates)
+}
+
+fn exit_with_error(message: &str) -> ! {
+    eprintln!("error: {}", message);
+    std::process::exit(2);
 }
 
 /// `--threads 0` means one thread per CPU.

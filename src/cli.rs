@@ -8,34 +8,55 @@ pub struct Cli {
     pub commands: Subcommands,
 }
 
+/// Where the patterns come from: a config file, `--pattern` options, or both.
+#[derive(Debug, PartialEq, StructOpt)]
+pub struct Source {
+    #[structopt(short, long, help = "Path to the config file")]
+    pub configfile: Option<PathBuf>,
+
+    #[structopt(
+        short = "p",
+        long = "pattern",
+        number_of_values = 1,
+        help = "A pattern to generate; repeat for more. Replaces the config file's patterns"
+    )]
+    pub patterns: Vec<String>,
+
+    #[structopt(
+        short,
+        long,
+        default_value = "1",
+        help = "Number of generator threads, 0 for one per CPU"
+    )]
+    pub threads: usize,
+}
+
 #[derive(Debug, PartialEq, StructOpt)]
 #[structopt()]
 pub enum Subcommands {
+    /// Write fake logs to stdout until stopped
     Generate {
-        /// Config file
-        #[structopt(short, long, help = "Path to the config file")]
-        configfile: PathBuf,
+        #[structopt(flatten)]
+        source: Source,
+
         #[structopt(
-            short,
             long,
-            default_value = "1",
-            help = "Number of generator threads, 0 for one per CPU"
+            help = "Events per second, 0 for uncapped. Overrides the config file [default: 10]"
         )]
-        threads: usize,
+        eps: Option<u128>,
     },
+    /// Measure how fast logs can be generated, without writing them
     Benchmark {
-        /// Config file
-        #[structopt(short, long, help = "Path to the config file")]
-        configfile: PathBuf,
-        #[structopt(long, help = "benchmark with eps limit from config file")]
-        eps: bool,
+        #[structopt(flatten)]
+        source: Source,
+
+        /// `--eps` alone uses the config file's rate; `--eps N` uses N.
         #[structopt(
-            short,
             long,
-            default_value = "1",
-            help = "Number of generator threads, 0 for one per CPU"
+            help = "Benchmark one second of events at this rate, or at the config file's rate if no value is given. Uncapped by default"
         )]
-        threads: usize,
+        #[allow(clippy::option_option)]
+        eps: Option<Option<u128>>,
     },
 }
 

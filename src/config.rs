@@ -28,7 +28,7 @@ struct RawConfig {
 }
 
 /// Low enough to watch in a terminal when the config doesn't set `eps`.
-fn default_eps() -> u128 {
+pub fn default_eps() -> u128 {
     10
 }
 

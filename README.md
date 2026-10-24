@@ -143,10 +143,27 @@ patterns:
 fakelogs generate -c </path/to/config/file.yaml>
 ```
 
+`--eps <n>` overrides the config file's rate (0 for uncapped):
+
+```shell
+fakelogs generate -c example/nginx-access.yaml --eps 500
+```
+
+## Generate logs without a config file
+
+Give patterns on the command line with `-p` (repeat it for more patterns). Without `--eps`, the rate is 10 events per second.
+
+```shell
+fakelogs generate -p '{ts_rfc3339} user={username} ip={ipv4}' --eps 100
+fakelogs generate -p 'GET /{word} 200' -p 'GET /{word} 500' --eps 0
+```
+
+With `-c` as well, `-p` replaces the config file's patterns but keeps its `eps`.
+
 ## Use multiple CPU cores
 
 Both `generate` and `benchmark` take `--threads <n>` (default 1). Use `--threads 0` for one thread per CPU.
-With an EPS cap, the rate is shared across the threads, so the total still matches the config file.
+With an EPS cap, the rate is shared across the threads, so the total still matches the cap.
 
 ```shell
 fakelogs benchmark -c </path/to/config/file.yaml> --threads 8
@@ -166,10 +183,12 @@ Benchmarking with 1 thread(s) ...
 EPS: 139739
 ```
 
-## Benchmark using the EPS value specified in config file
+## Benchmark one second of events at a capped rate
+
+`--eps <n>` benchmarks `n` events at `n` per second. `--eps` with no value uses the config file's rate.
 
 ```shell
-fakelogs benchmark -c </path/to/config/file.yaml> --eps
+fakelogs benchmark -c </path/to/config/file.yaml> --eps 1500
 
 Benchmarking with 1 thread(s) ...
 1500 log events generated in 1.000130086 seconds
