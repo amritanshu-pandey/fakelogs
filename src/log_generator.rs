@@ -1,4 +1,6 @@
 use crate::generators;
+use chrono::{DateTime, Utc};
+use rand::Rng;
 use std::hint::black_box;
 use std::io::{self, BufWriter, Write};
 use std::{thread, time};
@@ -53,26 +55,36 @@ impl Placeholder {
         Some(placeholder)
     }
 
-    fn generate(self, list_of_names: &[&str], list_of_words: &[&str]) -> String {
+    /// Appends a generated value to `out`. `now` is read at most once per event,
+    /// so all time placeholders in one event agree with each other.
+    fn write_to(
+        self,
+        out: &mut String,
+        rng: &mut impl Rng,
+        now: &mut Option<DateTime<Utc>>,
+        list_of_names: &[&str],
+        list_of_words: &[&str],
+    ) {
+        let mut now = || *now.get_or_insert_with(Utc::now);
         match self {
-            Self::Str => generators::random_str(10, 11),
-            Self::Ipv4 => generators::ipv4(),
-            Self::Email => generators::email(list_of_names),
-            Self::Username => generators::username(list_of_names),
-            Self::Day => generators::day().to_string(),
-            Self::Month => generators::month().to_string(),
-            Self::Year => generators::year().to_string(),
-            Self::Hour12 => generators::hour12().1.to_string(),
-            Self::Hour => generators::hour().to_string(),
-            Self::Minute => generators::minute().to_string(),
-            Self::Second => generators::second().to_string(),
-            Self::Int => generators::random_int(),
-            Self::TsRfc3339 => generators::ts_rfc3339(),
-            Self::Domain => generators::domain(),
-            Self::Tld => generators::tld(),
-            Self::Word => generators::word(list_of_words),
-            Self::Sentence => generators::sentence(list_of_words),
-            Self::Paragraph => generators::paragraph(list_of_words),
+            Self::Str => generators::random_str(out, rng, 10, 11),
+            Self::Ipv4 => generators::ipv4(out, rng),
+            Self::Email => generators::email(out, rng, list_of_names),
+            Self::Username => generators::username(out, rng, list_of_names),
+            Self::Day => generators::day(out, &now()),
+            Self::Month => generators::month(out, &now()),
+            Self::Year => generators::year(out, &now()),
+            Self::Hour12 => generators::hour12(out, &now()),
+            Self::Hour => generators::hour(out, &now()),
+            Self::Minute => generators::minute(out, &now()),
+            Self::Second => generators::second(out, &now()),
+            Self::Int => generators::random_int(out, rng),
+            Self::TsRfc3339 => generators::ts_rfc3339(out, &now()),
+            Self::Domain => generators::domain(out, rng),
+            Self::Tld => generators::tld(out, rng),
+            Self::Word => generators::word(out, rng, list_of_words),
+            Self::Sentence => generators::sentence(out, rng, list_of_words),
+            Self::Paragraph => generators::paragraph(out, rng, list_of_words),
         }
     }
 }
@@ -128,11 +140,13 @@ impl Template {
     /// Renders one log event into `out`, replacing its contents.
     pub fn render_into(&self, out: &mut String, list_of_names: &[&str], list_of_words: &[&str]) {
         out.clear();
+        let mut rng = rand::thread_rng();
+        let mut now = None;
         for token in &self.tokens {
             match token {
                 Token::Literal(text) => out.push_str(text),
                 Token::Placeholder(placeholder) => {
-                    out.push_str(&placeholder.generate(list_of_names, list_of_words))
+                    placeholder.write_to(out, &mut rng, &mut now, list_of_names, list_of_words)
                 }
             }
         }

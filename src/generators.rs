@@ -1,134 +1,148 @@
-use chrono::{self, Datelike, Timelike};
+//! Generators append their value to `out` instead of returning a new String,
+//! so rendering a log event doesn't allocate per placeholder.
+
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use rand::seq::SliceRandom;
 use rand::Rng;
+use std::fmt::Write;
 
-pub fn ipv4() -> String {
-    let mut rnd = rand::thread_rng();
-    let a: i32 = rnd.gen_range(1..255);
-    let b: i32 = rnd.gen_range(1..255);
-    let c: i32 = rnd.gen_range(1..255);
-    let d: i32 = rnd.gen_range(1..255);
+// Writing to a String can't fail, so the fmt::Result from write! is ignored.
 
-    format!("{}.{}.{}.{}", a, b, c, d)
+pub fn ipv4(out: &mut String, rng: &mut impl Rng) {
+    let a: u8 = rng.gen_range(1..255);
+    let b: u8 = rng.gen_range(1..255);
+    let c: u8 = rng.gen_range(1..255);
+    let d: u8 = rng.gen_range(1..255);
+
+    let _ = write!(out, "{}.{}.{}.{}", a, b, c, d);
 }
 
 #[test]
 fn test_ipv4() {
-    use std::net::{IpAddr, Ipv4Addr};
+    use std::net::Ipv4Addr;
 
-    let ip_addr = ipv4();
-    let random_ipv4: Vec<&str> = ip_addr.split(".").collect();
-    assert!(IpAddr::V4(Ipv4Addr::new(
-        random_ipv4[0].parse::<u8>().unwrap(),
-        random_ipv4[1].parse::<u8>().unwrap(),
-        random_ipv4[2].parse::<u8>().unwrap(),
-        random_ipv4[3].parse::<u8>().unwrap()
-    ))
-    .is_ipv4());
+    let mut ip_addr = String::new();
+    ipv4(&mut ip_addr, &mut rand::thread_rng());
+    assert!(ip_addr.parse::<Ipv4Addr>().is_ok());
 }
 
-pub fn random_str(min_length: usize, max_length: usize) -> String {
-    let mut rnd = rand::thread_rng();
-    let length = rnd.gen_range(min_length..max_length + 1);
-    random_string::generate(length, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+pub fn random_str(out: &mut String, rng: &mut impl Rng, min_length: usize, max_length: usize) {
+    let length = rng.gen_range(min_length..max_length + 1);
+    for _ in 0..length {
+        out.push(rng.gen_range(b'A'..=b'Z') as char);
+    }
 }
 
 #[test]
 fn test_random_str() {
-    let random_string = random_str(5, 10);
+    let random = |min, max| {
+        let mut out = String::new();
+        random_str(&mut out, &mut rand::thread_rng(), min, max);
+        out
+    };
+
+    let random_string = random(5, 10);
     assert!(random_string.len() >= 5 && random_string.len() <= 10);
 
-    let random_string = random_str(5, 5);
+    let random_string = random(5, 5);
     assert!(random_string.len() == 5);
 
-    let random_string = random_str(5, 6);
+    let random_string = random(5, 6);
     assert!(random_string.len() == 5 || random_string.len() == 6);
 }
 
-pub fn username(list_of_names: &[&str]) -> String {
-    let mut rng = rand::thread_rng();
-    list_of_names.choose(&mut rng).unwrap().to_string()
+pub fn username(out: &mut String, rng: &mut impl Rng, list_of_names: &[&str]) {
+    out.push_str(list_of_names.choose(rng).unwrap());
 }
 
-pub fn word(list_of_words: &[&str]) -> String {
-    let mut rng = rand::thread_rng();
-    list_of_words.choose(&mut rng).unwrap().to_string()
+pub fn word(out: &mut String, rng: &mut impl Rng, list_of_words: &[&str]) {
+    out.push_str(list_of_words.choose(rng).unwrap());
 }
 
-pub fn sentence(list_of_words: &[&str]) -> String {
-    let connector = " ";
-    let punctuation = ".";
+pub fn sentence(out: &mut String, rng: &mut impl Rng, list_of_words: &[&str]) {
+    let number_of_words = rng.gen_range(5..15);
 
-    let mut rnd = rand::thread_rng();
-    let number_of_words = rnd.gen_range(5..15);
-
-    let mut words: Vec<String> = vec![];
-    for _ in 0..number_of_words {
-        words.push(word(list_of_words));
+    for i in 0..number_of_words {
+        if i > 0 {
+            out.push(' ');
+        }
+        word(out, rng, list_of_words);
     }
-    format!("{}{}", words.join(connector), punctuation)
+    out.push('.');
 }
 
-pub fn paragraph(list_of_words: &[&str]) -> String {
-    let connector: &str = " ";
-
-    let mut rnd = rand::thread_rng();
-    let number_of_sentences = rnd.gen_range(5..15);
-
-    let mut sentences: Vec<String> = vec![];
-    for _ in 0..number_of_sentences {
-        sentences.push(sentence(list_of_words));
+#[test]
+fn test_sentence_word_count() {
+    let mut rng = rand::thread_rng();
+    for _ in 0..100 {
+        let mut out = String::new();
+        sentence(&mut out, &mut rng, &["word"]);
+        assert!(out.ends_with('.'));
+        let words = out.split(' ').count();
+        assert!((5..15).contains(&words));
     }
-    sentences.join(connector)
 }
 
-pub fn domain() -> String {
-    random_str(5, 10)
+pub fn paragraph(out: &mut String, rng: &mut impl Rng, list_of_words: &[&str]) {
+    let number_of_sentences = rng.gen_range(5..15);
+
+    for i in 0..number_of_sentences {
+        if i > 0 {
+            out.push(' ');
+        }
+        sentence(out, rng, list_of_words);
+    }
 }
 
-pub fn tld() -> String {
+pub fn domain(out: &mut String, rng: &mut impl Rng) {
+    random_str(out, rng, 5, 10)
+}
+
+pub fn tld(out: &mut String, rng: &mut impl Rng) {
     let choice = ["com", "it", "guru", "in", "com.au", "co.in", "co.uk"];
-    let mut rng = rand::thread_rng();
-    choice.choose(&mut rng).unwrap().to_string()
+    out.push_str(choice.choose(rng).unwrap());
 }
 
-pub fn email(list_of_names: &[&str]) -> String {
-    format!("{}@{}.{}", username(list_of_names), domain(), tld())
+pub fn email(out: &mut String, rng: &mut impl Rng, list_of_names: &[&str]) {
+    username(out, rng, list_of_names);
+    out.push('@');
+    domain(out, rng);
+    out.push('.');
+    tld(out, rng);
 }
 
-pub fn day() -> u32 {
-    chrono::Utc::now().day()
+pub fn day(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.day());
 }
 
-pub fn month() -> u32 {
-    chrono::Utc::now().month()
+pub fn month(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.month());
 }
 
-pub fn year() -> i32 {
-    chrono::Utc::now().year()
+pub fn year(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.year());
 }
 
-pub fn hour12() -> (bool, u32) {
-    chrono::Utc::now().hour12()
+pub fn hour12(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.hour12().1);
 }
 
-pub fn hour() -> u32 {
-    chrono::Utc::now().hour()
+pub fn hour(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.hour());
 }
 
-pub fn minute() -> u32 {
-    chrono::Utc::now().minute()
+pub fn minute(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.minute());
 }
 
-pub fn second() -> u32 {
-    chrono::Utc::now().second()
+pub fn second(out: &mut String, now: &DateTime<Utc>) {
+    let _ = write!(out, "{}", now.second());
 }
 
-pub fn random_int() -> String {
-    let mut rnd = rand::thread_rng();
-    rnd.gen_range(1..100).to_string()
+pub fn random_int(out: &mut String, rng: &mut impl Rng) {
+    let _ = write!(out, "{}", rng.gen_range(1..100));
 }
 
-pub fn ts_rfc3339() -> String {
-    chrono::Utc::now().to_rfc3339()
+pub fn ts_rfc3339(out: &mut String, now: &DateTime<Utc>) {
+    out.push_str(&now.to_rfc3339());
 }
