@@ -4,59 +4,67 @@ on:
   push:
     tags: 'v*'
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  create_release:
-    runs-on: ubuntu-latest
-    steps:
-    - name: create release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: release ${{ github.ref }}
-        draft: false
-        prerelease: false
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-  upload_assets:
-    needs: create_release
+  build:
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: fakelogs
+            target: x86_64-unknown-linux-gnu
             asset_name: fakelogs-linux-x64.tar.gz
           - os: macos-latest
-            artifact_name: fakelogs
+            target: x86_64-apple-darwin
             asset_name: fakelogs-darwin-x64.tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset_name: fakelogs-darwin-arm64.tar.gz
           - os: windows-latest
-            artifact_name: fakelogs.exe
-            asset_name: fakelogs-win-x64.tar.gz
+            target: x86_64-pc-windows-msvc
+            asset_name: fakelogs-win-x64.zip
     runs-on: ${{ matrix.os }}
     steps:
     - name: checkout the source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v7
       with:
         submodules: recursive
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
     - name: build (release)
-      run: cargo build --release
+      run: cargo build --release --target ${{ matrix.target }}
     - name: compress
-      uses: master-atul/tar-action@v1.0.2
+      if: runner.os != 'Windows'
+      run: tar -czf ${{ matrix.asset_name }} -C target/${{ matrix.target }}/release fakelogs
+    - name: compress (windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: Compress-Archive -Path target/${{ matrix.target }}/release/fakelogs.exe -DestinationPath ${{ matrix.asset_name }}
+    - name: store archive
+      uses: actions/upload-artifact@v7
       with:
-        command: c
-        cwd: ./target/release
-        files: |
-          ${{ matrix.artifact_name }}
-        outPath: ./target/release/${{ matrix.asset_name }}
-    - name: upload release assets
-      id: upload-release-assets
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: ${{ matrix.asset_name }}
+        path: ${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: checkout the source code
+      uses: actions/checkout@v7
+    - name: download archives
+      uses: actions/download-artifact@v8
       with:
-        upload_url: ${{ needs.create_release.outputs.upload_url }}
-        asset_path: ./target/release/${{ matrix.asset_name }}
-        asset_name: ${{ matrix.asset_name }}
-        asset_content_type: application/tar+gzip
+        path: dist
+        merge-multiple: true
+    - name: add example config file
+      run: cp example/fakejson.yaml dist/config.yaml
+    - name: create release
+      uses: softprops/action-gh-release@v3
+      with:
+        name: release ${{ github.ref_name }}
+        files: dist/*
