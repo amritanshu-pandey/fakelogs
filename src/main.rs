@@ -18,33 +18,33 @@ fn main() {
     match args.commands {
         cli::Subcommands::Benchmark { source, eps } => {
             let (cfg, templates) = load_patterns_or_exit(&source);
-            let threads = resolve_threads(source.threads);
             // `--eps N` or bare `--eps` (the config's rate) benchmarks one second's
             // worth of events at that rate; otherwise 100k events, uncapped.
-            let rate = match eps {
+            let eps = match eps {
                 Some(Some(rate)) => rate,
                 Some(None) => cfg.eps,
                 None => 0,
             };
-            let count = if rate > 0 { rate } else { 100000 };
-            log_generator::benchmark(
-                &templates,
-                count,
-                rate,
-                threads,
-                &list_of_names,
-                &list_of_words,
-            );
+            let default_count = if eps > 0 { eps } else { 100000 };
+            let options = log_generator::RunOptions {
+                eps,
+                count: Some(source.count.unwrap_or(default_count)),
+                threads: resolve_threads(source.threads),
+                seed: source.seed,
+            };
+            log_generator::benchmark(&options, &templates, &list_of_names, &list_of_words);
         }
         cli::Subcommands::Generate { source, eps } => {
             let (cfg, templates) = load_patterns_or_exit(&source);
-            if let Err(e) = log_generator::generate_logs(
-                eps.unwrap_or(cfg.eps),
-                resolve_threads(source.threads),
-                &templates,
-                &list_of_names,
-                &list_of_words,
-            ) {
+            let options = log_generator::RunOptions {
+                eps: eps.unwrap_or(cfg.eps),
+                count: source.count,
+                threads: resolve_threads(source.threads),
+                seed: source.seed,
+            };
+            if let Err(e) =
+                log_generator::generate_logs(&options, &templates, &list_of_names, &list_of_words)
+            {
                 // A closed pipe (e.g. `fakelogs generate ... | head`) is a normal way to stop.
                 if e.kind() != std::io::ErrorKind::BrokenPipe {
                     eprintln!("Error writing logs: {}", e);

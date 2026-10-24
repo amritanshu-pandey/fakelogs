@@ -29,6 +29,19 @@ pub struct Source {
         help = "Number of generator threads, 0 for one per CPU"
     )]
     pub threads: usize,
+
+    #[structopt(
+        short = "n",
+        long,
+        help = "Number of events to generate, then exit. generate runs until stopped by default, benchmark does 100000"
+    )]
+    pub count: Option<u128>,
+
+    #[structopt(
+        long,
+        help = "Seed for the random values, for repeatable output with the same --threads. Times still come from the clock"
+    )]
+    pub seed: Option<u64>,
 }
 
 #[derive(Debug, PartialEq, StructOpt)]

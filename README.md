@@ -160,6 +160,24 @@ fakelogs generate -p 'GET /{word} 200' -p 'GET /{word} 500' --eps 0
 
 With `-c` as well, `-p` replaces the config file's patterns but keeps its `eps`.
 
+## Generate a fixed number of events
+
+`-n <count>` stops after that many events, which is handy for writing test files:
+
+```shell
+fakelogs generate -c example/nginx-access.yaml --eps 0 -n 1000000 > access.log
+```
+
+## Repeatable output
+
+`--seed <n>` makes the random values repeatable: the same seed, patterns and `--threads` give the same output every run. Time placeholders (`{ts_rfc3339}`, `{unix}`, `{hour}` and so on) still come from the clock.
+
+```shell
+fakelogs generate -p '{ipv4} {username} {uuid}' -n 5 --seed 42
+```
+
+With more than one thread, the same lines are generated but their order can vary.
+
 ## Use multiple CPU cores
 
 Both `generate` and `benchmark` take `--threads <n>` (default 1). Use `--threads 0` for one thread per CPU.

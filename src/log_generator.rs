@@ -1,7 +1,8 @@
 use crate::config::PatternConfig;
 use crate::generators;
 use chrono::{DateTime, Utc};
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::hint::black_box;
 use std::io::{self, BufWriter, Write};
 use std::sync::mpsc;
@@ -281,14 +282,19 @@ impl Template {
     }
 
     /// Appends one rendered log event (without a newline) to `out`.
-    pub fn render_into(&self, out: &mut String, list_of_names: &[&str], list_of_words: &[&str]) {
-        let mut rng = rand::thread_rng();
+    pub fn render_into(
+        &self,
+        out: &mut String,
+        rng: &mut impl Rng,
+        list_of_names: &[&str],
+        list_of_words: &[&str],
+    ) {
         let mut now = None;
         for token in &self.tokens {
             match token {
                 Token::Literal(text) => out.push_str(text),
                 Token::Placeholder(placeholder) => {
-                    placeholder.write_to(out, &mut rng, &mut now, list_of_names, list_of_words)
+                    placeholder.write_to(out, rng, &mut now, list_of_names, list_of_words)
                 }
             }
         }
@@ -297,7 +303,12 @@ impl Template {
     #[cfg(test)]
     pub fn render(&self, list_of_names: &[&str], list_of_words: &[&str]) -> String {
         let mut out = String::new();
-        self.render_into(&mut out, list_of_names, list_of_words);
+        self.render_into(
+            &mut out,
+            &mut rand::thread_rng(),
+            list_of_names,
+            list_of_words,
+        );
         out
     }
 }
@@ -408,22 +419,70 @@ fn thread_rates(eps: u128, threads: usize) -> Vec<u128> {
 /// Batches are handed from generator threads to the writer at about this size.
 const BATCH_SIZE: usize = 64 * 1024;
 
+/// What one generator thread does: its share of the rate and event count,
+/// and its own random number generator.
+struct ThreadPlan {
+    eps: u128,
+    /// None means run until the writer hangs up.
+    count: Option<u128>,
+    rng: StdRng,
+}
+
+/// Splits the rate and count across threads. There are never more threads than
+/// events (or events per second), so every thread has some work. With a seed,
+/// each thread gets its own fixed seed, so the same seed gives the same output
+/// for the same number of threads.
+fn plan_threads(
+    eps: u128,
+    count: Option<u128>,
+    threads: usize,
+    seed: Option<u64>,
+) -> Vec<ThreadPlan> {
+    let threads = match count {
+        Some(count) => threads.min(count.max(1).try_into().unwrap_or(usize::MAX)),
+        None => threads,
+    };
+    let rates = thread_rates(eps, threads);
+    let counts = count.map(|count| split_evenly(count, rates.len()));
+    rates
+        .into_iter()
+        .enumerate()
+        .map(|(i, eps)| ThreadPlan {
+            eps,
+            count: counts.as_ref().map(|counts| counts[i]),
+            rng: match seed {
+                Some(seed) => StdRng::seed_from_u64(seed.wrapping_add(i as u64)),
+                None => StdRng::from_entropy(),
+            },
+        })
+        .collect()
+}
+
 /// Generates newline-terminated events into batches and sends them to the
-/// writer until the writer hangs up.
+/// writer until its count is done or the writer hangs up.
 fn generate_batches(
     batches: mpsc::SyncSender<String>,
-    eps: u128,
+    mut plan: ThreadPlan,
     templates: &[Template],
     list_of_names: &[&str],
     list_of_words: &[&str],
 ) {
-    let mut pacer = Pacer::new(eps);
+    let mut pacer = Pacer::new(plan.eps);
     let mut schedule = Schedule::new(templates);
     let mut batch = String::with_capacity(BATCH_SIZE);
+    let mut remaining = plan.count;
 
-    loop {
-        templates[schedule.next()].render_into(&mut batch, list_of_names, list_of_words);
+    while remaining != Some(0) {
+        templates[schedule.next()].render_into(
+            &mut batch,
+            &mut plan.rng,
+            list_of_names,
+            list_of_words,
+        );
         batch.push('\n');
+        if let Some(remaining) = remaining.as_mut() {
+            *remaining -= 1;
+        }
         let delay = pacer.as_mut().and_then(Pacer::delay);
         // Send before idling so rate-limited output arrives steadily
         // instead of in batch-sized bursts.
@@ -436,6 +495,9 @@ fn generate_batches(
         if let Some(delay) = delay {
             thread::sleep(delay);
         }
+    }
+    if !batch.is_empty() {
+        let _ = batches.send(batch);
     }
 }
 
@@ -460,21 +522,30 @@ fn write_batches(batches: mpsc::Receiver<String>) -> io::Result<()> {
     out.flush()
 }
 
+/// Settings shared by `generate` and `benchmark`.
+pub struct RunOptions {
+    /// Events per second, 0 for uncapped.
+    pub eps: u128,
+    /// Total events; None means until stopped.
+    pub count: Option<u128>,
+    pub threads: usize,
+    pub seed: Option<u64>,
+}
+
 pub fn generate_logs(
-    eps: u128,
-    threads: usize,
+    options: &RunOptions,
     templates: &[Template],
     list_of_names: &[&str],
     list_of_words: &[&str],
 ) -> io::Result<()> {
-    let rates = thread_rates(eps, threads);
-    let (sender, receiver) = mpsc::sync_channel(rates.len() * 4);
+    let plans = plan_threads(options.eps, options.count, options.threads, options.seed);
+    let (sender, receiver) = mpsc::sync_channel(plans.len() * 4);
 
     thread::scope(|scope| {
-        for rate in rates {
+        for plan in plans {
             let sender = sender.clone();
             scope.spawn(move || {
-                generate_batches(sender, rate, templates, list_of_names, list_of_words)
+                generate_batches(sender, plan, templates, list_of_names, list_of_words)
             });
         }
         drop(sender);
@@ -486,19 +557,24 @@ pub fn generate_logs(
 /// Renders `count` events at up to `eps` events per second (0 = uncapped)
 /// and returns how many were generated.
 fn benchmark_thread(
-    count: u128,
-    eps: u128,
+    mut plan: ThreadPlan,
     templates: &[Template],
     list_of_names: &[&str],
     list_of_words: &[&str],
 ) -> u128 {
+    let count = plan.count.unwrap_or(0);
     let mut counter: u128 = 0;
-    let mut pacer = Pacer::new(eps);
+    let mut pacer = Pacer::new(plan.eps);
     let mut schedule = Schedule::new(templates);
     let mut line = String::new();
     while counter < count {
         line.clear();
-        templates[schedule.next()].render_into(&mut line, list_of_names, list_of_words);
+        templates[schedule.next()].render_into(
+            &mut line,
+            &mut plan.rng,
+            list_of_names,
+            list_of_words,
+        );
         black_box(&line);
         counter += 1;
         if let Some(delay) = pacer.as_mut().and_then(Pacer::delay) {
@@ -508,27 +584,22 @@ fn benchmark_thread(
     counter
 }
 
+/// `options.count` is how many events to generate; it must be set.
 pub fn benchmark(
+    options: &RunOptions,
     templates: &[Template],
-    count: u128,
-    eps: u128,
-    threads: usize,
     list_of_names: &[&str],
     list_of_words: &[&str],
 ) {
-    let rates = thread_rates(eps, threads.min(count.try_into().unwrap_or(usize::MAX)));
-    let counts = split_evenly(count, rates.len());
-    eprintln!("Benchmarking with {} thread(s) ...", rates.len());
+    let plans = plan_threads(options.eps, options.count, options.threads, options.seed);
+    eprintln!("Benchmarking with {} thread(s) ...", plans.len());
 
     let start_time = time::Instant::now();
     let counter: u128 = thread::scope(|scope| {
-        let workers: Vec<_> = counts
+        let workers: Vec<_> = plans
             .into_iter()
-            .zip(rates)
-            .map(|(count, rate)| {
-                scope.spawn(move || {
-                    benchmark_thread(count, rate, templates, list_of_names, list_of_words)
-                })
+            .map(|plan| {
+                scope.spawn(move || benchmark_thread(plan, templates, list_of_names, list_of_words))
             })
             .collect();
         workers.into_iter().map(|w| w.join().unwrap()).sum()
@@ -702,6 +773,55 @@ mod tests {
         let mut schedule = Schedule::new(&templates_with_weights(&[3, 1]));
         let picks: Vec<usize> = (0..8).map(|_| schedule.next()).collect();
         assert_eq!(picks, vec![0, 0, 1, 0, 0, 0, 1, 0]);
+    }
+
+    /// Runs one generator thread to completion and returns what it wrote.
+    fn generate_to_string(templates: &[Template], count: u128, seed: u64) -> String {
+        let (sender, receiver) = mpsc::sync_channel(1024);
+        let plan = plan_threads(0, Some(count), 1, Some(seed)).pop().unwrap();
+        generate_batches(sender, plan, templates, NAMES, WORDS);
+        receiver.iter().collect()
+    }
+
+    #[test]
+    fn test_count_stops_after_exact_number_of_events() {
+        let templates = parse_patterns(&[PatternConfig {
+            pattern: "{paragraph}".to_string(),
+            weight: 1,
+        }])
+        .unwrap();
+        // Enough events to fill several batches, plus a partial one.
+        assert_eq!(
+            generate_to_string(&templates, 2500, 1).lines().count(),
+            2500
+        );
+        assert_eq!(generate_to_string(&templates, 0, 1), "");
+    }
+
+    #[test]
+    fn test_seed_gives_repeatable_output() {
+        let templates = parse_patterns(&[PatternConfig {
+            pattern: "{ipv4} {uuid} {int:1-1000} {word} {choice:a|b|c}".to_string(),
+            weight: 1,
+        }])
+        .unwrap();
+        let first = generate_to_string(&templates, 100, 42);
+        assert_eq!(first, generate_to_string(&templates, 100, 42));
+        assert_ne!(first, generate_to_string(&templates, 100, 43));
+    }
+
+    #[test]
+    fn test_plan_threads_splits_count_and_never_starts_idle_threads() {
+        let counts = |count, threads| -> Vec<Option<u128>> {
+            plan_threads(0, count, threads, None)
+                .iter()
+                .map(|p| p.count)
+                .collect()
+        };
+        assert_eq!(counts(Some(10), 3), vec![Some(4), Some(3), Some(3)]);
+        assert_eq!(counts(Some(2), 8), vec![Some(1), Some(1)]);
+        assert_eq!(counts(Some(0), 4), vec![Some(0)]);
+        assert_eq!(counts(None, 2), vec![None, None]);
     }
 
     #[test]
