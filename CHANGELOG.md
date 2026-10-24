@@ -4,6 +4,8 @@ All notable changes to fakelogs. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-25
+
 ### Added
 
 - `-n, --count <N>` stops after N events. For `benchmark` it replaces the default of 100000.
@@ -75,7 +77,8 @@ All notable changes to fakelogs. The format follows [Keep a Changelog](https://k
 
 - First release.
 
-[Unreleased]: https://github.com/amritanshu-pandey/fakelogs/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/amritanshu-pandey/fakelogs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/amritanshu-pandey/fakelogs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/amritanshu-pandey/fakelogs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/amritanshu-pandey/fakelogs/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/amritanshu-pandey/fakelogs/compare/v0.1.1...v0.1.2
