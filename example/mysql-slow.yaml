@@ -1,0 +1,9 @@
+# MySQL slow query log. Each entry spans several lines; double-quoted YAML
+# strings turn \n into a real line break.
+#   # Time / # User@Host / # Query_time ... / SET timestamp / the query
+patterns:
+  - "# Time: {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z\n# User@Host: {choice:app[app]|app[app]|reporting[reporting]|admin[admin]} @  [10.0.{int:0-255}.{int:1-254}]  Id: {int:10-99999}\n# Query_time: {int:1-30}.{int:100000-999999}  Lock_time: 0.000{int:100-999} Rows_sent: {int:1-500}  Rows_examined: {int:10000-9000000}\nuse {choice:shop|analytics};\nSET timestamp={unix};\nSELECT * FROM {choice:orders|events|sessions} WHERE {choice:created_at|user_id|status} {choice:>|=} {int:1-99999} ORDER BY id DESC LIMIT {choice:20|50|100};"
+  - "# Time: {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z\n# User@Host: reporting[reporting] @  [10.0.{int:0-255}.{int:1-254}]  Id: {int:10-99999}\n# Query_time: {int:5-120}.{int:100000-999999}  Lock_time: 0.00{int:1000-9999} Rows_sent: {int:1-50}  Rows_examined: {int:1000000-90000000}\nSET timestamp={unix};\nSELECT DATE(created_at) AS day, COUNT(*) AS orders, SUM(total) AS revenue FROM orders JOIN users ON users.id = orders.user_id WHERE users.country = 'AU' GROUP BY day;"
+  - "# Time: {year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z\n# User@Host: app[app] @  [10.0.{int:0-255}.{int:1-254}]  Id: {int:10-99999}\n# Query_time: {int:1-9}.{int:100000-999999}  Lock_time: {int:1-9}.{int:100000-999999} Rows_sent: 0  Rows_examined: {int:1-500}\nSET timestamp={unix};\nUPDATE inventory SET quantity = quantity - 1 WHERE sku = '{hex:8}';"
+
+eps: 10

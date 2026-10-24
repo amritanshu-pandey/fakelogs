@@ -1,0 +1,15 @@
+# Redis server log:
+#   pid:role DD Mon YYYY HH:MM:SS.mmm level message
+# role is M (primary), S (replica), C (child process for RDB/AOF) or X (sentinel);
+# level is . (debug), - (verbose), * (notice) or # (warning).
+patterns:
+  - '1:M {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} * {int:100-10000} changes in {choice:60|300|3600} seconds. Saving...'
+  - '1:M {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} * Background saving started by pid {int:100-9999}'
+  - '{int:100-9999}:C {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} * DB saved on disk'
+  - '{int:100-9999}:C {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} * Fork CoW for RDB: current {int:0-9} MB, peak {int:0-9} MB, average {int:0-9} MB'
+  - '1:M {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} * Background saving terminated with success'
+  - '1:S {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} * {choice:Connecting to MASTER 10.0.1.10:6379|MASTER <-> REPLICA sync: Finished with success|Partial resynchronization not possible (no cached master)}'
+  - '1:M {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} # {choice:WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition.|Possible SECURITY ATTACK detected. It looks like somebody is sending POST or Host: commands to Redis.}'
+  - '1:M {day} {month_name} {year} {hour}:{minute}:{second}.{int:100-999} # Client id={int:1-99999} addr=10.0.{int:0-255}.{int:1-254}:{int:1024-65535} laddr=10.0.1.10:6379 fd={int:8-900} name= age={int:0-9000} idle=0 flags=N db=0 cmd=client|list closed for overcoming of output buffer limits.'
+
+eps: 10

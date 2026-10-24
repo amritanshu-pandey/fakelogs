@@ -1,0 +1,12 @@
+# Linux audit daemon (auditd) records, as in /var/log/audit/audit.log:
+#   type=TYPE msg=audit(EPOCH.MILLIS:SERIAL): field=value ...
+# Real events are several records sharing one serial number; here each line has its own.
+patterns:
+  - 'type=SYSCALL msg=audit({unix}.{int:100-999}:{int:1000-999999}): arch=c000003e syscall=59 success=yes exit=0 a0=55d{hex:9} a1=55d{hex:9} a2=55d{hex:9} a3=0 items=2 ppid={int:1000-65000} pid={int:1000-65000} auid={choice:1000|1001|0} uid={choice:0|1000|33} gid={choice:0|1000|33} euid={choice:0|1000|33} suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty={choice:pts0|pts1|(none)} ses={int:1-50} comm="{choice:curl|bash|python3|wget|nc}" exe="/usr/bin/{choice:curl|bash|python3|wget|nc}" subj=unconfined key="exec"'
+  - 'type=EXECVE msg=audit({unix}.{int:100-999}:{int:1000-999999}): argc=3 a0="{choice:curl|wget}" a1="{choice:-s|-q|-O}" a2="http://{ipv4}/{word}.sh"'
+  - 'type=USER_LOGIN msg=audit({unix}.{int:100-999}:{int:1000-999999}): pid={int:1000-65000} uid=0 auid={choice:1000|1001|4294967295} ses={int:1-50} subj=unconfined msg=''op=login acct="{choice:root|ubuntu|deploy|admin}" exe="/usr/sbin/sshd" hostname=? addr={ipv4} terminal=ssh res={choice:success|success|failed}'' UID="root" AUID="{choice:ubuntu|deploy|unset}"'
+  - 'type=USER_CMD msg=audit({unix}.{int:100-999}:{int:1000-999999}): pid={int:1000-65000} uid=1000 auid=1000 ses={int:1-50} subj=unconfined msg=''cwd="/home/ubuntu" cmd=73797374656D63746C2072657374617274206E67696E78 exe="/usr/bin/sudo" terminal=pts/0 res=success'' UID="ubuntu" AUID="ubuntu"'
+  - 'type=AVC msg=audit({unix}.{int:100-999}:{int:1000-999999}): avc:  denied  { {choice:read|write|open|getattr} } for  pid={int:1000-65000} comm="{choice:httpd|nginx|php-fpm}" name="{word}.conf" dev="nvme0n1p1" ino={int:100000-9999999} scontext=system_u:system_r:httpd_t:s0 tcontext=unconfined_u:object_r:user_home_t:s0 tclass=file permissive=0'
+  - 'type=CONFIG_CHANGE msg=audit({unix}.{int:100-999}:{int:1000-999999}): auid=1000 ses={int:1-50} subj=unconfined op=add_rule key="{choice:identity|exec|sshd_config}" list=4 res=1'
+
+eps: 10

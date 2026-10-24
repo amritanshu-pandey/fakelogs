@@ -1,0 +1,10 @@
+# Graylog Extended Log Format (GELF 1.1) messages, one JSON object per line.
+# https://go2docs.graylog.org/current/getting_in_log_data/gelf.html
+# level is the syslog severity (3 error, 4 warning, 6 info, 7 debug); custom fields start with _.
+patterns:
+  - '{"version":"1.1","host":"{choice:web|api|worker}-{int:1-20}","short_message":"{sentence}","timestamp":{unix}.{int:100-999},"level":6,"_service":"{choice:checkout|cart|auth}","_request_id":"{uuid}","_user_id":{int:1-500000},"_env":"production"}'
+  - '{"version":"1.1","host":"{choice:web|api}-{int:1-20}","short_message":"GET /api/{word} {choice:200|200|201|304}","timestamp":{unix}.{int:100-999},"level":6,"_http_method":"GET","_http_status":{choice:200|200|201|304},"_duration_ms":{int:1-900},"_remote_addr":"{ipv4}"}'
+  - '{"version":"1.1","host":"{choice:api|worker}-{int:1-20}","short_message":"{choice:Retrying request to payment provider|Cache miss rate above threshold|Queue depth growing}","timestamp":{unix}.{int:100-999},"level":4,"_service":"{choice:payments|cache|queue}","_attempt":{int:1-5}}'
+  - '{"version":"1.1","host":"{choice:api|worker}-{int:1-20}","short_message":"{choice:Database connection failed|Unhandled exception in request handler|Upstream returned 502}","full_message":"{paragraph}","timestamp":{unix}.{int:100-999},"level":3,"_service":"{choice:checkout|payments|auth}","_exception":"{choice:ConnectionError|NullPointerException|TimeoutError}","_trace_id":"{hex:32}"}'
+
+eps: 10

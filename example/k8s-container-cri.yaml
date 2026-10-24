@@ -1,0 +1,13 @@
+# Kubernetes container log lines in the CRI format, as found in /var/log/pods/*/*/*.log on each node
+# and read by the OpenTelemetry Collector filelog receiver, Fluent Bit, Vector, etc:
+#   TIMESTAMP STREAM P|F MESSAGE
+# P marks a partial line that continues in the next record, F a full (or final) line.
+# The partial line followed by its final part only stays in order with --threads 1.
+patterns:
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000000-999999999}Z stdout F {"level":"info","ts":"{ts_rfc3339}","msg":"request completed","method":"{choice:GET|GET|POST}","path":"/api/{word}","status":{choice:200|200|201|404},"duration_ms":{int:1-900}}'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000000-999999999}Z stdout F {ipv4} - - [{day}/{month_name}/{year}:{hour}:{minute}:{second} +0000] "GET /{word} HTTP/1.1" {choice:200|200|304|404} {int:100-90000} "-" "kube-probe/1.31"'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000000-999999999}Z stderr F {choice:E|W}{month}{day} {hour}:{minute}:{second}.{int:100000-999999}       1 {choice:controller.go|reflector.go|leaderelection.go}:{int:50-900}] {sentence}'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000000-999999999}Z stdout P {"level":"debug","ts":"{ts_rfc3339}","msg":"large payload","payload":"{paragraph}'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000000-999999999}Z stdout F  {sentence}"}'
+
+eps: 10

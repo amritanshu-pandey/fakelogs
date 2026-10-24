@@ -1,0 +1,9 @@
+# Zeek dns.log records, tab separated (without the #fields header):
+#   ts uid id.orig_h id.orig_p id.resp_h id.resp_p proto trans_id rtt query qclass qclass_name
+#   qtype qtype_name rcode rcode_name AA TC RD RA Z answers TTLs rejected
+patterns:
+  - "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t10.0.0.2\t53\tudp\t{int:1-65535}\t0.00{int:1000-9999}\t{choice:www|api|cdn|login}.{domain}.{tld}\t1\tC_INTERNET\t1\tA\t0\tNOERROR\tF\tF\tT\tT\t0\t{ipv4},{ipv4}\t{int:30-300}.000000,{int:30-300}.000000\tF"
+  - "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t10.0.0.2\t53\tudp\t{int:1-65535}\t0.00{int:1000-9999}\t{choice:www|api|mail}.{domain}.{tld}\t1\tC_INTERNET\t28\tAAAA\t0\tNOERROR\tF\tF\tT\tT\t0\t{ipv6}\t{int:30-300}.000000\tF"
+  - "{unix}.{int:100000-999999}\tC{hex:17}\t10.0.{int:0-255}.{int:1-254}\t{int:1024-65535}\t10.0.0.2\t53\tudp\t{int:1-65535}\t0.0{int:10000-99999}\t{hex:24}.{domain}.{tld}\t1\tC_INTERNET\t{choice:1|16}\t{choice:A|TXT}\t3\tNXDOMAIN\tF\tF\tT\tT\t0\t-\t-\tF"
+
+eps: 10

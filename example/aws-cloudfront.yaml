@@ -1,0 +1,12 @@
+# Amazon CloudFront standard (access) log records, tab separated, without the #Version and #Fields headers.
+# https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/standard-logs-reference.html
+#   date time x-edge-location sc-bytes c-ip cs-method cs(Host) cs-uri-stem sc-status cs(Referer)
+#   cs(User-Agent) cs-uri-query cs(Cookie) x-edge-result-type x-edge-request-id x-host-header
+#   cs-protocol cs-bytes time-taken x-forwarded-for ssl-protocol ssl-cipher x-edge-response-result-type
+#   cs-protocol-version fle-status fle-encrypted-fields c-port time-to-first-byte
+#   x-edge-detailed-result-type sc-content-type sc-content-len sc-range-start sc-range-end
+patterns:
+  - "{year}-{month}-{day}\t{hour}:{minute}:{second}\t{choice:SYD62-P1|LHR61-C2|IAD89-C1|FRA56-P5|SIN52-C3}\t{int:300-900000}\t{ipv4}\tGET\td{hex:13}.cloudfront.net\t/{choice:assets|images|static}/{word}.{choice:js|css|png|jpg|woff2}\t{choice:200|200|200|304|404}\t{choice:-|https://www.example.com/}\tMozilla/5.0%20(Macintosh;%20Intel%20Mac%20OS%20X%2014_6)%20AppleWebKit/605.1.15%20(KHTML,%20like%20Gecko)%20Version/18.0%20Safari/605.1.15\t-\t-\t{choice:Hit|Hit|Hit|Miss|RefreshHit}\t{hex:8}{hex:8}{hex:8}{hex:8}{hex:8}{hex:8}==\twww.example.com\thttps\t{int:100-900}\t0.{int:1-999}\t-\tTLSv1.3\tTLS_AES_128_GCM_SHA256\t{choice:Hit|Hit|Miss}\tHTTP/2.0\t-\t-\t{int:1024-65535}\t0.{int:1-999}\t{choice:Hit|Hit|Miss}\t{choice:application/javascript|text/css|image/png|image/jpeg|font/woff2}\t{int:300-900000}\t-\t-"
+  - "{year}-{month}-{day}\t{hour}:{minute}:{second}\t{choice:SYD62-P1|LHR61-C2|IAD89-C1}\t{int:300-9000}\t{ipv4}\t{choice:GET|POST}\td{hex:13}.cloudfront.net\t/api/{word}\t{choice:200|200|403|500|502}\t-\tcurl/8.10.1\tid={int:1-99999}\t-\t{choice:Miss|Error}\t{hex:8}{hex:8}{hex:8}{hex:8}{hex:8}{hex:8}==\tapi.example.com\thttps\t{int:100-5000}\t{int:0-3}.{int:1-999}\t-\tTLSv1.2\tECDHE-RSA-AES128-GCM-SHA256\t{choice:Miss|Error}\tHTTP/1.1\t-\t-\t{int:1024-65535}\t{int:0-3}.{int:1-999}\t{choice:Miss|OriginError}\tapplication/json\t{int:2-9000}\t-\t-"
+
+eps: 10

@@ -1,0 +1,11 @@
+# MySQL 8 error log (log_error_verbosity 3):
+#   TIMESTAMP THREAD_ID [LEVEL] [ERROR_CODE] [SUBSYSTEM] message
+patterns:
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z {int:1-999} [Warning] [MY-010055] [Server] IP address ''{ipv4}'' could not be resolved: Name or service not known'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z {int:1-999} [Note] [MY-010914] [Server] Aborted connection {int:10-99999} to db: ''{choice:shop|analytics}'' user: ''{choice:app|reporting}'' host: ''10.0.{int:0-255}.{int:1-254}'' (Got timeout reading communication packets).'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z {int:1-999} [Warning] [MY-013360] [Server] Plugin mysql_native_password reported: ''''mysql_native_password'''' is deprecated and will be removed in a future release. Please use caching_sha2_password instead'''
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z {int:1-999} [Note] [MY-010926] [Server] Access denied for user ''{choice:root|admin|test}''@''{ipv4}'' (using password: YES)'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z 0 [System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: ''8.4.3''  socket: ''/var/run/mysqld/mysqld.sock''  port: 3306  MySQL Community Server - GPL.'
+  - '{year}-{month}-{day}T{hour}:{minute}:{second}.{int:100000-999999}Z {int:1-999} [ERROR] [MY-012592] [InnoDB] Operating system error number 28 in a file operation.'
+
+eps: 10

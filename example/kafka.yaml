@@ -1,0 +1,11 @@
+# Apache Kafka broker log (log4j, the default server.log layout):
+#   [YYYY-MM-DD HH:MM:SS,mmm] LEVEL message (logger)
+patterns:
+  - '[{year}-{month}-{day} {hour}:{minute}:{second},{int:100-999}] INFO [LocalLog partition={choice:orders|payments|clickstream}-{int:0-11}, dir=/var/lib/kafka/data] Rolled new log segment at offset {int:1000000-999999999} in {int:1-30} ms. (kafka.log.LocalLog)'
+  - '[{year}-{month}-{day} {hour}:{minute}:{second},{int:100-999}] INFO [GroupCoordinator {int:1-3}]: Preparing to rebalance group {choice:order-processor|analytics-sink|search-indexer} in state PreparingRebalance with old generation {int:1-900} (__consumer_offsets-{int:0-49}) (reason: Adding new member consumer-{choice:order-processor|analytics-sink|search-indexer}-{int:1-9}-{uuid} with group instance id None; client reason: rebalance failed due to MemberIdRequiredException) (kafka.coordinator.group.GroupCoordinator)'
+  - '[{year}-{month}-{day} {hour}:{minute}:{second},{int:100-999}] INFO [GroupCoordinator {int:1-3}]: Stabilized group {choice:order-processor|analytics-sink|search-indexer} generation {int:1-900} (__consumer_offsets-{int:0-49}) with {int:1-12} members (kafka.coordinator.group.GroupCoordinator)'
+  - '[{year}-{month}-{day} {hour}:{minute}:{second},{int:100-999}] INFO [Partition {choice:orders|payments|clickstream}-{int:0-11} broker={int:1-3}] ISR updated to {int:1-3},{int:1-3} and version updated to {int:1-900} (kafka.cluster.Partition)'
+  - '[{year}-{month}-{day} {hour}:{minute}:{second},{int:100-999}] WARN [ReplicaFetcher replicaId={int:1-3}, leaderId={int:1-3}, fetcherId=0] Error in response for fetch request (type=FetchRequest, replicaId={int:1-3}, maxWait=500, minBytes=1, maxBytes=10485760) (kafka.server.ReplicaFetcherThread)'
+  - '[{year}-{month}-{day} {hour}:{minute}:{second},{int:100-999}] ERROR [KafkaApi-{int:1-3}] Error when handling request: clientId=producer-{int:1-99}, correlationId={int:1-999999}, api=PRODUCE, version=11 (kafka.server.KafkaApis)'
+
+eps: 10

@@ -1,0 +1,11 @@
+# Microsoft IIS logs in W3C Extended format, with the default fields:
+#   date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent)
+#   cs(Referer) sc-status sc-substatus sc-win32-status time-taken
+# Real files start with #Software, #Version, #Date and #Fields header lines, which aren't generated here.
+patterns:
+  - '{year}-{month}-{day} {hour}:{minute}:{second} 10.0.0.{int:2-20} {choice:GET|GET|GET|POST} /{choice:default.aspx|products/list.aspx|api/orders|login.aspx|Content/site.css} {choice:-|-|id=1842|page=3|q=shoes|id=27} 443 {choice:-|-|-|CORP\jsmith|CORP\akumar} {ipv4} {choice:Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/130.0.0.0+Safari/537.36+Edg/130.0.0.0|Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64;+rv:131.0)+Gecko/20100101+Firefox/131.0} {choice:-|https://www.example.com/|https://www.bing.com/} {choice:200|200|200|302|304} 0 0 {int:15-900}'
+  - '{year}-{month}-{day} {hour}:{minute}:{second} 10.0.0.{int:2-20} GET /{choice:wp-login.php|.env|admin/config.php|phpmyadmin/index.php} - 443 - {ipv4} {choice:Mozilla/5.0+zgrab/0.x|python-requests/2.32.3|curl/8.10.1} - 404 0 2 {int:1-30}'
+  - '{year}-{month}-{day} {hour}:{minute}:{second} 10.0.0.{int:2-20} POST /login.aspx - 443 - {ipv4} Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/130.0.0.0+Safari/537.36 https://www.example.com/login.aspx 401 {choice:1|2|3} {choice:1326|5} {int:50-900}'
+  - '{year}-{month}-{day} {hour}:{minute}:{second} 10.0.0.{int:2-20} GET /api/orders id={int:1-9999} 443 - {ipv4} okhttp/4.12.0 - 500 0 0 {int:1000-30000}'
+
+eps: 10

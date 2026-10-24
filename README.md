@@ -42,28 +42,92 @@ See [example/mixed.yaml](example/mixed.yaml) for patterns in several common log 
 
 ## Example library
 
-Ready-to-run configs for common log formats live in [example/](example/):
+Ready-to-run configs for common log formats live in [example/](example/). Run one with:
+
+```shell
+fakelogs generate -c example/nginx-access.yaml
+```
+
+**Web servers and proxies**
 
 | File | Format |
 |---|---|
 | [nginx-access.yaml](example/nginx-access.yaml) | nginx / Apache combined access log |
 | [nginx-error.yaml](example/nginx-error.yaml) | nginx error log |
 | [haproxy.yaml](example/haproxy.yaml) | HAProxy HTTP and TCP logs, health check events |
+| [envoy-istio.yaml](example/envoy-istio.yaml) | Envoy and Istio sidecar access logs |
+| [traefik.yaml](example/traefik.yaml) | Traefik JSON access log |
+| [caddy.yaml](example/caddy.yaml) | Caddy JSON access and error log |
+| [iis-w3c.yaml](example/iis-w3c.yaml) | Microsoft IIS, W3C Extended format |
+
+**Cloud**
+
+| File | Format |
+|---|---|
 | [aws-alb.yaml](example/aws-alb.yaml) | AWS Application Load Balancer access log |
+| [aws-cloudfront.yaml](example/aws-cloudfront.yaml) | Amazon CloudFront standard log (tab separated) |
+| [aws-s3-access.yaml](example/aws-s3-access.yaml) | Amazon S3 server access log |
 | [aws-vpc-flow.yaml](example/aws-vpc-flow.yaml) | AWS VPC flow log (version 2) |
+| [aws-cloudtrail.yaml](example/aws-cloudtrail.yaml) | AWS CloudTrail: sign-ins, AssumeRole, S3, IAM, AccessDenied |
+| [gcp-cloud-logging.yaml](example/gcp-cloud-logging.yaml) | Google Cloud Logging: GKE, load balancer, audit logs |
+| [azure-activity.yaml](example/azure-activity.yaml) | Azure Activity Log |
+
+**Kubernetes and observability**
+
+| File | Format |
+|---|---|
+| [k8s-container-cri.yaml](example/k8s-container-cri.yaml) | Container log lines in the CRI format, as on Kubernetes nodes |
+| [k8s-audit.yaml](example/k8s-audit.yaml) | Kubernetes API server audit log |
+| [otel-logs.yaml](example/otel-logs.yaml) | OpenTelemetry log records in OTLP/JSON, readable by the Collector's `otlp_json_file` receiver |
+
+**Security**
+
+| File | Format |
+|---|---|
 | [syslog-rfc3164.yaml](example/syslog-rfc3164.yaml) | BSD syslog: sshd, sudo, cron, systemd, kernel |
 | [syslog-rfc5424.yaml](example/syslog-rfc5424.yaml) | IETF syslog with structured data |
+| [linux-auditd.yaml](example/linux-auditd.yaml) | Linux auditd: syscalls, logins, sudo, SELinux denials |
+| [windows-security.yaml](example/windows-security.yaml) | Windows Security events 4624, 4625, 4672, 4688, 4720, 4740 as JSON |
+| [zeek-conn.yaml](example/zeek-conn.yaml) | Zeek conn.log (tab separated) |
+| [zeek-dns.yaml](example/zeek-dns.yaml) | Zeek dns.log (tab separated) |
+| [suricata-eve.yaml](example/suricata-eve.yaml) | Suricata EVE JSON: alerts, DNS, HTTP, TLS, flows |
+| [cef-firewall.yaml](example/cef-firewall.yaml) | Firewall events in ArcSight CEF |
+| [okta-system-log.yaml](example/okta-system-log.yaml) | Okta System Log: sign-ins, MFA, SSO, group changes |
+| [github-audit.yaml](example/github-audit.yaml) | GitHub organization audit log |
+
+**Databases and middleware**
+
+| File | Format |
+|---|---|
+| [postgresql.yaml](example/postgresql.yaml) | PostgreSQL server log |
+| [mysql-slow.yaml](example/mysql-slow.yaml) | MySQL slow query log (multi-line) |
+| [mysql-error.yaml](example/mysql-error.yaml) | MySQL 8 error log |
+| [mongodb.yaml](example/mongodb.yaml) | MongoDB structured JSON log |
+| [redis.yaml](example/redis.yaml) | Redis server log |
+| [kafka.yaml](example/kafka.yaml) | Apache Kafka broker log |
+
+**Application logs**
+
+| File | Format |
+|---|---|
 | [json-app.yaml](example/json-app.yaml) | JSON application logs |
 | [logfmt-app.yaml](example/logfmt-app.yaml) | logfmt (key=value) application logs |
-| [postgresql.yaml](example/postgresql.yaml) | PostgreSQL server log |
-| [cef-firewall.yaml](example/cef-firewall.yaml) | Firewall events in ArcSight CEF |
-| [mixed.yaml](example/mixed.yaml) | One of each, using every placeholder |
+| [logstash-json.yaml](example/logstash-json.yaml) | logstash-logback-encoder JSON (Java/Spring) |
+| [ecs.yaml](example/ecs.yaml) | Elastic Common Schema (ECS) JSON |
+| [gelf.yaml](example/gelf.yaml) | Graylog GELF 1.1 |
+| [multiline-stacktraces.yaml](example/multiline-stacktraces.yaml) | Java and Python stack traces mixed with normal lines |
+| [mixed.yaml](example/mixed.yaml) | One of each common style, using every placeholder |
 
-```shell
-fakelogs generate -c example/nginx-access.yaml
+Each placeholder is random on its own, so related fields aren't linked: for example, an ALB entry's `elb_status_code` and `target_status_code` can differ. Where fields must agree (like an event ID and its message), the examples use one pattern per case.
+
+### Multi-line and tab-separated patterns
+
+Write a pattern in double quotes to use `\n` (new line) and `\t` (tab), as in [multiline-stacktraces.yaml](example/multiline-stacktraces.yaml) and [zeek-conn.yaml](example/zeek-conn.yaml):
+
+```yaml
+patterns:
+  - "{ts_rfc3339} ERROR request failed\njava.lang.IllegalStateException: {sentence}\n\tat com.example.Service.run(Service.java:{int:10-400})"
 ```
-
-Each placeholder is random on its own, so related fields aren't linked: for example, an ALB entry's `elb_status_code` and `target_status_code` can differ.
 
 ## Generate logs and output to STDOUT
 
